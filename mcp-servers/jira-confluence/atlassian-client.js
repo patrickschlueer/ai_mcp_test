@@ -28,6 +28,138 @@ class AtlassianClient {
   }
 
   /**
+   * Hilfsfunktion: Konvertiere Markdown zu ADF (Atlassian Document Format)
+   */
+  markdownToADF(markdown) {
+    const lines = markdown.split('\n');
+    const content = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      
+      if (!trimmed) {
+        // Leere Zeile = neuer Paragraph mit leerem Text
+        continue;
+      }
+      
+      // Überschriften
+      if (trimmed.startsWith('## ')) {
+        content.push({
+          type: 'heading',
+          attrs: { level: 2 },
+          content: [{ type: 'text', text: trimmed.substring(3) }]
+        });
+      } else if (trimmed.startsWith('### ')) {
+        content.push({
+          type: 'heading',
+          attrs: { level: 3 },
+          content: [{ type: 'text', text: trimmed.substring(4) }]
+        });
+      }
+      // Liste
+      else if (trimmed.startsWith('- ')) {
+        // Finde alle aufeinanderfolgenden Listen-Items
+        const listItems = [];
+        let i = lines.indexOf(line);
+        
+        while (i < lines.length && lines[i].trim().startsWith('- ')) {
+          const itemText = lines[i].trim().substring(2);
+          listItems.push({
+            type: 'listItem',
+            content: [{
+              type: 'paragraph',
+              content: [{ type: 'text', text: itemText }]
+            }]
+          });
+          i++;
+        }
+        
+        content.push({
+          type: 'bulletList',
+          content: listItems
+        });
+        
+        // Überspringe die bereits verarbeiteten Zeilen
+        lines.splice(lines.indexOf(line), listItems.length - 1);
+      }
+      // Code Block
+      else if (trimmed.startsWith('```')) {
+        let i = lines.indexOf(line) + 1;
+        const codeLines = [];
+        
+        while (i < lines.length && !lines[i].trim().startsWith('```')) {
+          codeLines.push(lines[i]);
+          i++;
+        }
+        
+        content.push({
+          type: 'codeBlock',
+          content: [{ type: 'text', text: codeLines.join('\n') }]
+        });
+        
+        lines.splice(lines.indexOf(line), codeLines.length + 2);
+      }
+      // Horizontale Linie
+      else if (trimmed === '---') {
+        content.push({ type: 'rule' });
+      }
+      // Normaler Paragraph
+      else {
+        // Parse inline formatting
+        const paragraphContent = [];
+        let text = trimmed;
+        
+        // **Bold**
+        const boldRegex = /\*\*([^*]+)\*\*/g;
+        let lastIndex = 0;
+        let match;
+        
+        while ((match = boldRegex.exec(text)) !== null) {
+          // Text vor dem Bold
+          if (match.index > lastIndex) {
+            paragraphContent.push({
+              type: 'text',
+              text: text.substring(lastIndex, match.index)
+            });
+          }
+          
+          // Bold Text
+          paragraphContent.push({
+            type: 'text',
+            text: match[1],
+            marks: [{ type: 'strong' }]
+          });
+          
+          lastIndex = match.index + match[0].length;
+        }
+        
+        // Rest des Textes
+        if (lastIndex < text.length) {
+          paragraphContent.push({
+            type: 'text',
+            text: text.substring(lastIndex)
+          });
+        }
+        
+        // Wenn kein inline formatting gefunden wurde
+        if (paragraphContent.length === 0) {
+          paragraphContent.push({ type: 'text', text: text });
+        }
+        
+        content.push({
+          type: 'paragraph',
+          content: paragraphContent
+        });
+      }
+    }
+    
+    return {
+      type: 'doc',
+      version: 1,
+      content: content
+    };
+  }
+  /**
    * Hilfsfunktion: Extrahiere Text aus Atlassian Document Format (ADF)
    */
   extractTextFromADF(adf) {
@@ -90,7 +222,7 @@ class AtlassianClient {
         maxResults = 50 
       } = filters;
 
-      // JQL Query bauen
+      // JQL Query bauen - INKLUDIERE AUCH SUB-TASKS!
       let jql = `project = ${this.projectKey}`;
       
       if (status) {
@@ -172,7 +304,7 @@ class AtlassianClient {
         `/rest/api/3/issue/${ticketKey}`,
         {
           params: {
-            fields: 'summary,description,status,assignee,created,updated,priority,issuetype,comment'
+            fields: 'summary,description,status,assignee,created,updated,priority,issuetype,comment,parent,labels,subtasks'
           }
         }
       );
@@ -206,6 +338,13 @@ class AtlassianClient {
         created: issue.fields.created,
         updated: issue.fields.updated,
         url: `https://${this.host}/browse/${issue.key}`,
+        parentKey: issue.fields.parent?.key || null,
+        labels: issue.fields.labels || [],
+        subTasks: issue.fields.subtasks?.map(st => ({
+          key: st.key,
+          summary: st.fields.summary,
+          status: st.fields.status.name
+        })) || [],
         comments: issue.fields.comment?.comments?.map(c => ({
           author: c.author.displayName,
           body: c.body,
@@ -257,7 +396,13 @@ class AtlassianClient {
 
       // Andere Felder
       if (updates.summary) payload.fields.summary = updates.summary;
-      if (updates.description) payload.fields.description = updates.description;
+      
+      // 🔥 WICHTIG: Beschreibung muss als ADF formatiert sein!
+      if (updates.description) {
+        console.log(`[JiraClient] Converting Markdown to ADF...`);
+        payload.fields.description = this.markdownToADF(updates.description);
+      }
+      
       if (updates.assignee) {
         payload.fields.assignee = { accountId: updates.assignee };
       }
@@ -277,9 +422,14 @@ class AtlassianClient {
       };
     } catch (error) {
       console.error(`[JiraClient] Error updating ticket ${ticketKey}:`, error.message);
+      if (error.response) {
+        console.error(`[JiraClient] Response status:`, error.response.status);
+        console.error(`[JiraClient] Response data:`, JSON.stringify(error.response.data, null, 2));
+      }
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        details: error.response?.data
       };
     }
   }
@@ -323,6 +473,86 @@ class AtlassianClient {
       return {
         success: false,
         error: error.message
+      };
+    }
+  }
+
+  /**
+   * JIRA: Sub-Task erstellen
+   */
+  async createSubTask(parentKey, summary, description, labels = []) {
+    try {
+      console.log(`[JiraClient] Creating sub-task for: ${parentKey}`);
+
+      // Hole Parent-Ticket um Project-ID zu bekommen
+      const parentResponse = await this.axiosInstance.get(
+        `/rest/api/3/issue/${parentKey}`,
+        { params: { fields: 'project,issuetype' } }
+      );
+
+      const projectId = parentResponse.data.fields.project.id;
+      
+      // Hole Sub-Task Issue Type
+      const issueTypesResponse = await this.axiosInstance.get(
+        `/rest/api/3/issue/createmeta`,
+        {
+          params: {
+            projectIds: projectId,
+            expand: 'projects.issuetypes'
+          }
+        }
+      );
+
+      const project = issueTypesResponse.data.projects[0];
+      const subTaskType = project.issuetypes.find(t => t.subtask === true);
+
+      if (!subTaskType) {
+        throw new Error('No sub-task issue type found');
+      }
+
+      // Erstelle Sub-Task
+      const payload = {
+        fields: {
+          project: { id: projectId },
+          parent: { key: parentKey },
+          summary: summary,
+          issuetype: { id: subTaskType.id }
+        }
+      };
+
+      // Description als ADF
+      if (description) {
+        payload.fields.description = this.markdownToADF(description);
+      }
+
+      // Labels
+      if (labels && labels.length > 0) {
+        payload.fields.labels = labels;
+      }
+
+      const response = await this.axiosInstance.post(
+        `/rest/api/3/issue`,
+        payload
+      );
+
+      const subTaskKey = response.data.key;
+      console.log(`[JiraClient] Sub-task created: ${subTaskKey}`);
+
+      return {
+        success: true,
+        key: subTaskKey,
+        id: response.data.id,
+        url: `https://${this.host}/browse/${subTaskKey}`
+      };
+    } catch (error) {
+      console.error(`[JiraClient] Error creating sub-task for ${parentKey}:`, error.message);
+      if (error.response) {
+        console.error(`[JiraClient] Response:`, JSON.stringify(error.response.data, null, 2));
+      }
+      return {
+        success: false,
+        error: error.message,
+        details: error.response?.data
       };
     }
   }

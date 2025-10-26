@@ -1,0 +1,15 @@
+{
+  "name": "reviewer-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI Agent that reviews pull requests and provides constructive feedback",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7"
+  }
+}

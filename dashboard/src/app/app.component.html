@@ -1,0 +1,337 @@
+<div class="dashboard">
+  
+  <!-- TOP NAVBAR -->
+  <nav class="top-navbar">
+    <div class="navbar-left">
+      <h1 class="navbar-title">
+        <span>🎯</span>
+        <span>AI Agent Control Center</span>
+      </h1>
+      <div class="connection-badge" [style.background]="connectionStatus === 'connected' ? '#10b981' : connectionStatus === 'connecting' ? '#f59e0b' : '#ef4444'">
+        {{ connectionStatus === 'connected' ? '🟢 Connected' : connectionStatus === 'connecting' ? '🟡 Connecting...' : '🔴 Disconnected' }}
+      </div>
+    </div>
+    
+    <div class="navbar-stats">
+      <div class="navbar-stat">
+        <span class="navbar-stat-value">{{ activeAgents.length }}</span>
+        <span class="navbar-stat-label">Active Agents</span>
+      </div>
+      <div class="navbar-stat">
+        <span class="navbar-stat-value">{{ onlineMcpServers.length }}</span>
+        <span class="navbar-stat-label">MCP Servers</span>
+      </div>
+      <div class="navbar-stat">
+        <span class="navbar-stat-value">{{ ticketsWaitingForApproval.length }}</span>
+        <span class="navbar-stat-label">Awaiting Approval</span>
+      </div>
+      <div class="navbar-stat">
+        <span class="navbar-stat-value">{{ approvedTickets.length }}</span>
+        <span class="navbar-stat-label">Approved</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    
+    <!-- APPROVAL QUEUE - FEATURED SECTION -->
+    <section class="approval-queue">
+      <div class="approval-queue-header">
+        <h2 class="approval-queue-title">
+          <span>⏳</span>
+          <span>Approval Queue</span>
+          <span class="approval-count">{{ ticketsWaitingForApproval.length }}</span>
+        </h2>
+      </div>
+      
+      <div *ngIf="ticketsWaitingForApproval.length === 0" class="empty-approval">
+        <div class="empty-approval-icon">✅</div>
+        <p>No tickets waiting for approval</p>
+        <small>Agents are working or idle</small>
+      </div>
+      
+      <div class="approval-items" *ngIf="ticketsWaitingForApproval.length > 0">
+        <div *ngFor="let item of ticketsWaitingForApproval; trackBy: trackByTicket" class="approval-item">
+          <div class="approval-item-header">
+            <div class="ticket-key">
+              <a [href]="getJiraTicketUrl(item.ticketKey)" target="_blank" class="ticket-link">
+                {{ item.ticketKey }}
+                <span>🔗</span>
+              </a>
+            </div>
+            <!-- 🆕 REJECTED BADGE -->
+            <div class="rejected-badge" *ngIf="item.rejected" 
+                 style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 2px solid #ef4444; padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">
+              ⚠️ REJECTED
+            </div>
+            <!-- 🆕 NEEDS CLARIFICATION BADGE -->
+            <div class="clarification-badge" *ngIf="item.needsClarification" 
+                 style="background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 2px solid #fbbf24; padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">
+              🔄 ITERATION {{ item.iteration }}/{{ item.maxIterations }}
+            </div>
+            <div class="story-points-badge" *ngIf="item.analysis && item.analysis.storyPoints">
+              {{ item.analysis.storyPoints }} SP
+            </div>
+          </div>
+          
+          <!-- 🆕 Rejected Reason -->
+          <div *ngIf="item.rejected && item.rejectedReason" 
+               style="margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; border-radius: 4px; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+            <strong>⚠️ Rejected:</strong> {{ item.rejectedReason }}
+          </div>
+          
+          <!-- 🆕 NEU: Clarification Reason -->
+          <div *ngIf="item.needsClarification && item.clarificationReason" 
+               style="margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(251, 191, 36, 0.1); border-left: 3px solid #fbbf24; border-radius: 4px; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+            <strong>🔄 Iteration {{ item.iteration }}/{{ item.maxIterations }}:</strong> {{ item.clarificationReason }}
+          </div>
+          
+          <div class="ticket-summary">{{ item.summary }}</div>
+          
+          <div class="approval-meta">
+            <span>👤 {{ item.agentName }}</span>
+            <span>⏰ {{ getTimeSince(item.timestamp) }}</span>
+            <span *ngIf="item.analysis && item.analysis.questions && item.analysis.questions.length > 0 && item.analysis.questions[0] !== 'See Jira for questions'">❓ {{ item.analysis.questions.length }} {{ item.analysis.questions.length === 1 ? 'question' : 'questions' }}</span>
+          </div>
+          
+          <div *ngIf="item.analysis" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="display: flex; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+              <!-- 🆕 Clarity Badge mit Farbe -->
+              <div class="clarity-badge" 
+                   [style.background]="getClarityBadgeColor(item.analysis.clarity).bg"
+                   [style.color]="getClarityBadgeColor(item.analysis.clarity).text"
+                   [style.border]="'2px solid ' + getClarityBadgeColor(item.analysis.clarity).border">
+                <span style="font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">Clarity</span>
+                <span style="font-weight: 800; font-size: 0.95rem;">{{ item.analysis.clarity }}</span>
+              </div>
+              
+              <!-- 🆕 Complexity Badge mit Farbe -->
+              <div class="complexity-badge"
+                   [style.background]="getComplexityBadgeColor(item.analysis.complexity).bg"
+                   [style.color]="getComplexityBadgeColor(item.analysis.complexity).text"
+                   [style.border]="'2px solid ' + getComplexityBadgeColor(item.analysis.complexity).border">
+                <span style="font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;">Complexity</span>
+                <span style="font-weight: 800; font-size: 0.95rem;">{{ item.analysis.complexity }}</span>
+              </div>
+            </div>
+            
+            <div *ngIf="item.analysis.questions && item.analysis.questions.length > 0 && item.analysis.questions[0] !== 'See Jira for questions'" style="margin-top: 0.5rem;">
+              <div style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-bottom: 0.3rem;"><strong>Questions:</strong></div>
+              <ul style="margin-left: 1.2rem; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+                <li *ngFor="let q of item.analysis.questions" style="margin-bottom: 0.3rem;">{{ q }}</li>
+              </ul>
+            </div>
+            
+            <div *ngIf="item.analysis.recommendation" style="margin-top: 0.5rem; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+              <strong>Recommendation:</strong> {{ item.analysis.recommendation }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 🆕 SUB-TASKS SECTION -->
+    <section class="sub-tasks-section" *ngIf="subTasks.length > 0">
+      <div class="sub-tasks-header">
+        <h2 class="sub-tasks-title">
+          <span>📋</span>
+          <span>Sub-Tasks (Agent Work)</span>
+          <span class="sub-tasks-count">{{ subTasks.length }}</span>
+        </h2>
+      </div>
+      
+      <div class="sub-tasks-items">
+        <div *ngFor="let item of subTasks; trackBy: trackByTicket" class="sub-task-item">
+          <div class="sub-task-item-header">
+            <div class="ticket-key">
+              <a [href]="getJiraTicketUrl(item.ticketKey)" target="_blank" class="ticket-link">
+                {{ item.ticketKey }}
+                <span>🔗</span>
+              </a>
+            </div>
+            <div class="agent-badge" *ngIf="item.agentType" 
+                 [style.background]="item.agentType === 'architecture' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(236, 72, 153, 0.2)'"
+                 [style.color]="item.agentType === 'architecture' ? '#8b5cf6' : '#ec4899'"
+                 [style.border]="'2px solid ' + (item.agentType === 'architecture' ? '#8b5cf6' : '#ec4899')">
+              {{ item.agentType === 'architecture' ? '🏛️ Architect' : '🎨 Designer' }}
+            </div>
+            <div class="status-badge" 
+                 [style.background]="item.status === 'To Do' ? 'rgba(148, 163, 184, 0.2)' : item.status === 'In Progress' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(34, 197, 94, 0.2)'"
+                 [style.color]="item.status === 'To Do' ? '#94a3b8' : item.status === 'In Progress' ? '#3b82f6' : '#22c55e'">
+              {{ item.status }}
+            </div>
+          </div>
+          
+          <div class="ticket-summary">{{ item.summary }}</div>
+          
+          <div class="sub-task-meta">
+            <span>🔗 Parent: <a [href]="getJiraTicketUrl(item.parentKey)" target="_blank" style="color: #3b82f6; text-decoration: none;">{{ item.parentKey }}</a></span>
+            <span>⏰ {{ getTimeSince(item.created) }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 🆕 APPROVED TICKETS SECTION -->
+    <section class="approved-tickets" *ngIf="approvedTickets.length > 0">
+      <div class="approved-tickets-header">
+        <h2 class="approved-tickets-title">
+          <span>✅</span>
+          <span>Approved & Finalized Tickets</span>
+          <span class="approved-count">{{ approvedTickets.length }}</span>
+        </h2>
+      </div>
+      
+      <div class="approved-items">
+        <div *ngFor="let item of approvedTickets; trackBy: trackByTicket" class="approved-item">
+          <div class="approved-item-header">
+            <div class="ticket-key">
+              <a [href]="getJiraTicketUrl(item.ticketKey)" target="_blank" class="ticket-link">
+                {{ item.ticketKey }}
+                <span>🔗</span>
+              </a>
+            </div>
+            <div class="story-points-badge">
+              {{ item.storyPoints }} SP
+            </div>
+            <div class="finalized-badge" *ngIf="item.finalized">
+              ✅ Finalized
+            </div>
+          </div>
+          
+          <div class="ticket-summary" *ngIf="!item.description">{{ item.summary }}</div>
+          
+          <!-- 🆕 NEU: Beschreibung anzeigen falls vorhanden (vollständig) -->
+          <div *ngIf="item.description" class="ticket-description" 
+               style="margin-top: 1rem; padding: 1rem; background: rgba(16, 185, 129, 0.05); border-left: 3px solid #10b981; border-radius: 4px; color: rgba(255,255,255,0.9); font-size: 0.85rem; line-height: 1.6; white-space: pre-wrap; max-height: 400px; overflow-y: auto;">
+            {{ item.description }}
+          </div>
+          
+          <div class="approved-meta">
+            <span>👤 {{ item.agentName }}</span>
+            <span>⏰ {{ getTimeSince(item.timestamp) }}</span>
+            <span>🚀 Ready for Development</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AI AGENTS GRID -->
+    <div class="agents-grid">
+      <div *ngIf="agents.length === 0" class="empty-state">
+        <p>No agents connected</p>
+        <small>Agents will appear here when they start</small>
+      </div>
+      
+      <div *ngFor="let agent of agents" class="agent-card">
+        <div class="agent-card-header">
+          <div class="agent-info">
+            <span class="agent-emoji">{{ agent.emoji || '🤖' }}</span>
+            <div class="agent-details">
+              <h3>{{ agent.name }}</h3>
+              <span class="agent-id">{{ agent.id }}</span>
+            </div>
+          </div>
+          <div class="agent-status-badge" [style.background]="getStatusColor(agent.status) + '20'" [style.color]="getStatusColor(agent.status)">
+            <span class="status-dot" [style.background]="getStatusColor(agent.status)"></span>
+            <span>{{ agent.status }}</span>
+          </div>
+        </div>
+        
+        <div *ngIf="agent.currentActivity" class="agent-current-activity">
+          <span class="activity-label">Current Activity</span>
+          <div class="activity-text">{{ agent.currentActivity }}</div>
+        </div>
+        
+        <div class="agent-timeline">
+          <ng-container *ngIf="getAgentEvents(agent.id) as agentEvents">
+            <div class="timeline-header">
+              <span>Recent Activity</span>
+              <span class="event-count">{{ agentEvents.length }}</span>
+            </div>
+            
+            <div *ngIf="agentEvents.length === 0" class="no-events">
+              No recent activity
+            </div>
+            
+            <div *ngFor="let event of agentEvents.slice().reverse(); trackBy: trackByEvent" class="timeline-event">
+              <div class="event-dot" [style.background]="getEventTypeColor(event.type)"></div>
+              <div class="event-content">
+                <div class="event-header">
+                  <span class="event-type">{{ getEventTypeName(event.type) }}</span>
+                  <span class="event-time">{{ formatTime(event.timestamp) }}</span>
+                </div>
+                <div class="event-message">{{ event.message }}</div>
+                <div *ngIf="event.details" class="event-details">{{ event.details }}</div>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+      </div>
+    </div>
+
+    <!-- SYSTEM PANEL (RIGHT SIDE) -->
+    <aside class="system-panel">
+      
+      <!-- MCP SERVERS -->
+      <section class="mcp-servers-section">
+        <h2 class="section-title">
+          <span>📡</span>
+          <span>MCP Servers</span>
+        </h2>
+        
+        <div *ngIf="mcpServers.length === 0" class="empty-state">
+          <p>No MCP servers</p>
+          <small>Servers will appear when started</small>
+        </div>
+        
+        <div *ngFor="let server of mcpServers" class="mcp-server">
+          <div class="mcp-header">
+            <div class="mcp-name">
+              <span>📡</span>
+              <span>{{ server.name }}</span>
+            </div>
+            <div class="mcp-status">
+              <span class="status-dot" [style.background]="getStatusColor(server.status)"></span>
+              <span [style.color]="getStatusColor(server.status)">{{ server.status }}</span>
+            </div>
+          </div>
+          <div class="mcp-meta">
+            {{ server.type }} · Port {{ server.port }} · {{ getTimeSince(server.lastSeen) }}
+          </div>
+        </div>
+      </section>
+      
+      <!-- GLOBAL TIMELINE -->
+      <section class="global-timeline-section">
+        <h2 class="section-title">
+          <span>📊</span>
+          <span>Global Activity</span>
+        </h2>
+        
+        <div *ngIf="recentEvents.length === 0" class="empty-state">
+          <p>No events yet</p>
+        </div>
+        
+        <div *ngFor="let event of recentEvents" class="timeline-event">
+          <div class="event-dot" [style.background]="getEventTypeColor(event.type)"></div>
+          <div class="event-content">
+            <div class="event-header">
+              <span class="event-type">
+                {{ event.source === 'agent' ? (event.agentName || 'Agent') : (event.serverName || 'MCP') }}
+                · {{ getEventTypeName(event.type) }}
+              </span>
+              <span class="event-time">{{ formatTime(event.timestamp) }}</span>
+            </div>
+            <div class="event-message">{{ event.message }}</div>
+            <div *ngIf="event.details" class="event-details">{{ event.details }}</div>
+          </div>
+        </div>
+      </section>
+      
+    </aside>
+
+  </div>
+
+</div>

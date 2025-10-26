@@ -1,0 +1,15 @@
+{
+  "name": "agent-orchestrator",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Agent Orchestrator - Coordinates all AI agents",
+  "main": "orchestrator.js",
+  "scripts": {
+    "start": "node orchestrator.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7"
+  }
+}

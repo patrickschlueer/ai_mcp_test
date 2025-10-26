@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 AI Agent Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎯 AI Agent Control Center</h1>
+            <div class="connection-status" id="connectionStatus">
+                ❌ Disconnected
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Left Column: Agents & MCP Servers -->
+            <div class="left-column">
+                <!-- AI Agents -->
+                <section class="section">
+                    <h2>🤖 AI Agents</h2>
+                    <div class="cards" id="agentCards">
+                        <div class="empty-state">No agents connected yet...</div>
+                    </div>
+                </section>
+
+                <!-- MCP Servers -->
+                <section class="section">
+                    <h2>📡 MCP Servers</h2>
+                    <div class="cards" id="mcpCards">
+                        <div class="empty-state">No MCP servers connected yet...</div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column: Activity Timeline -->
+            <div class="right-column">
+                <section class="section">
+                    <h2>📊 Activity Timeline</h2>
+                    <div class="timeline" id="timeline">
+                        <div class="empty-state">Waiting for activity...</div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
