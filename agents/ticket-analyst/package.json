@@ -1,0 +1,19 @@
+{
+  "name": "ticket-analyst-agent",
+  "version": "1.0.0",
+  "description": "AI Agent that analyzes Jira tickets and asks clarifying questions",
+  "main": "agent.js",
+  "type": "module",
+  "scripts": {
+    "start": "node agent.js",
+    "test": "node test-agent.js"
+  },
+  "keywords": ["ai", "agent", "jira", "analyst"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1"
+  }
+}
