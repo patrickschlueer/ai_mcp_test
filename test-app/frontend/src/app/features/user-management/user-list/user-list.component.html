@@ -1,507 +1,133 @@
-<div class="user-list-container">
-  <header class="user-list-header">
-    <h1 class="page-title">User Management</h1>
+<div class="card">
+  <div class="card-header">
+    <h2>Users ({{ filteredUsers.length }} of {{ totalUsers }})</h2>
     <div class="header-actions">
-      <button 
-        type="button" 
-        class="btn btn-primary"
-        (click)="onAddUser()"
-        aria-label="Add new user">
-        <i class="icon-plus" aria-hidden="true"></i>
-        Add User
+      <button class="btn btn-toggle-filter" 
+              (click)="toggleFilter()" 
+              [class.active]="showFilter"
+              aria-label="Toggle filter panel">
+        🔍 Filter
+      </button>
+      <button class="btn btn-refresh" (click)="onRefresh()">
+        🔄 Refresh
       </button>
     </div>
-  </header>
+  </div>
 
-  <!-- Quick Filters Bar -->
-  <div class="quick-filters-bar">
-    <div class="quick-filter-buttons">
-      <button 
-        type="button"
-        class="quick-filter-btn"
-        [class.active]="activeQuickFilter === 'all'"
-        (click)="onQuickFilter('all')"
-        aria-pressed="false">
-        All Users ({{ totalUsers }})
-      </button>
-      <button 
-        type="button"
-        class="quick-filter-btn"
-        [class.active]="activeQuickFilter === 'active'"
-        (click)="onQuickFilter('active')"
-        aria-pressed="false">
-        Active ({{ activeUsersCount }})
-      </button>
-      <button 
-        type="button"
-        class="quick-filter-btn"
-        [class.active]="activeQuickFilter === 'admins'"
-        (click)="onQuickFilter('admins')"
-        aria-pressed="false">
-        Admins ({{ adminUsersCount }})
-      </button>
-      <button 
-        type="button"
-        class="quick-filter-btn"
-        [class.active]="activeQuickFilter === 'recent'"
-        (click)="onQuickFilter('recent')"
-        aria-pressed="false">
-        Recent ({{ recentUsersCount }})
-      </button>
-    </div>
-    
-    <button 
-      type="button"
-      class="advanced-filter-toggle"
-      [class.active]="showAdvancedFilters"
-      (click)="toggleAdvancedFilters()"
-      [attr.aria-expanded]="showAdvancedFilters"
-      aria-controls="advanced-filters-panel">
-      <i class="icon-filter" aria-hidden="true"></i>
-      Advanced Filters
-      <i class="icon-chevron" [class.rotate]="showAdvancedFilters" aria-hidden="true"></i>
+  <!-- Filter Panel -->
+  <div class="filter-panel" *ngIf="showFilter" [@slideDown]>
+    <app-user-filter
+      [filterCriteria]="filterCriteria"
+      [availableRoles]="availableRoles"
+      (filterChange)="onFilterChange($event)"
+      (clearFilter)="onClearFilter()">
+    </app-user-filter>
+  </div>
+
+  <!-- Quick Filters -->
+  <div class="quick-filters" *ngIf="!showFilter">
+    <button class="btn btn-quick-filter"
+            [class.active]="isQuickFilterActive('active')"
+            (click)="applyQuickFilter('active')">
+      Active Users
+    </button>
+    <button class="btn btn-quick-filter"
+            [class.active]="isQuickFilterActive('admin')"
+            (click)="applyQuickFilter('admin')">
+      Admins
+    </button>
+    <button class="btn btn-quick-filter"
+            [class.active]="isQuickFilterActive('recent')"
+            (click)="applyQuickFilter('recent')">
+      Recent
+    </button>
+    <button class="btn btn-clear-filter"
+            *ngIf="hasActiveFilters"
+            (click)="onClearFilter()">
+      Clear All
     </button>
   </div>
 
-  <!-- Advanced Filters Panel -->
-  <div 
-    id="advanced-filters-panel"
-    class="advanced-filters-panel"
-    [class.expanded]="showAdvancedFilters"
-    [attr.aria-hidden]="!showAdvancedFilters">
-    
-    <div class="filter-row">
-      <div class="filter-group">
-        <label for="search-input" class="filter-label">Search</label>
-        <div class="search-input-wrapper">
-          <i class="icon-search" aria-hidden="true"></i>
-          <input 
-            id="search-input"
-            type="text" 
-            class="search-input"
-            placeholder="Search by name, email, or role..."
-            [value]="searchTerm"
-            (input)="onSearchChange($event)"
-            (keyup.enter)="applyFilters()"
-            aria-describedby="search-help">
-          <button 
-            type="button"
-            class="clear-search-btn"
-            *ngIf="searchTerm"
-            (click)="clearSearch()"
-            aria-label="Clear search">
-            <i class="icon-x" aria-hidden="true"></i>
-          </button>
-        </div>
-        <small id="search-help" class="filter-help">Search across name, email, and role fields</small>
-      </div>
-
-      <div class="filter-group">
-        <label for="status-filter" class="filter-label">Status</label>
-        <select 
-          id="status-filter"
-          class="filter-select"
-          [value]="selectedStatus"
-          (change)="onStatusChange($event)">
-          <option value="">All Statuses</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="pending">Pending</option>
-          <option value="suspended">Suspended</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label for="role-filter" class="filter-label">Role</label>
-        <select 
-          id="role-filter"
-          class="filter-select"
-          [value]="selectedRole"
-          (change)="onRoleChange($event)">
-          <option value="">All Roles</option>
-          <option value="admin">Admin</option>
-          <option value="editor">Editor</option>
-          <option value="viewer">Viewer</option>
-          <option value="contributor">Contributor</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="filter-row">
-      <div class="filter-group">
-        <label for="department-filter" class="filter-label">Department</label>
-        <select 
-          id="department-filter"
-          class="filter-select"
-          [value]="selectedDepartment"
-          (change)="onDepartmentChange($event)">
-          <option value="">All Departments</option>
-          <option *ngFor="let dept of departments" [value]="dept.id">
-            {{ dept.name }}
-          </option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label for="created-from" class="filter-label">Created From</label>
-        <input 
-          id="created-from"
-          type="date"
-          class="filter-date"
-          [value]="createdFromDate"
-          (change)="onCreatedFromChange($event)">
-      </div>
-
-      <div class="filter-group">
-        <label for="created-to" class="filter-label">Created To</label>
-        <input 
-          id="created-to"
-          type="date"
-          class="filter-date"
-          [value]="createdToDate"
-          (change)="onCreatedToChange($event)">
-      </div>
-    </div>
-
-    <!-- Filter Actions -->
-    <div class="filter-actions">
-      <button 
-        type="button"
-        class="btn btn-secondary"
-        (click)="clearAllFilters()"
-        [disabled]="!hasActiveFilters">
-        Clear All
+  <!-- Active Filter Summary -->
+  <div class="filter-summary" *ngIf="hasActiveFilters && !showFilter">
+    <span class="filter-info">Filtered by:</span>
+    <span class="filter-tag" *ngFor="let filter of activeFilterTags">
+      {{ filter.label }}
+      <button class="filter-remove" 
+              (click)="removeFilter(filter.key)"
+              aria-label="Remove {{ filter.label }} filter">
+        ✕
       </button>
-      <button 
-        type="button"
-        class="btn btn-primary"
-        (click)="applyFilters()">
-        Apply Filters
-      </button>
-    </div>
-
-    <!-- Active Filters Display -->
-    <div class="active-filters" *ngIf="activeFilters.length > 0">
-      <span class="active-filters-label">Active filters:</span>
-      <div class="filter-tags">
-        <span 
-          *ngFor="let filter of activeFilters; trackBy: trackByFilterId"
-          class="filter-tag">
-          {{ filter.label }}: {{ filter.value }}
-          <button 
-            type="button"
-            class="remove-filter-btn"
-            (click)="removeFilter(filter.key)"
-            [attr.aria-label]="'Remove ' + filter.label + ' filter'">
-            <i class="icon-x" aria-hidden="true"></i>
-          </button>
-        </span>
-      </div>
-    </div>
+    </span>
   </div>
 
-  <!-- Results Header -->
-  <div class="results-header">
-    <div class="results-info">
-      <span class="results-count">
-        Showing {{ filteredUsers.length }} of {{ totalUsers }} users
-      </span>
-      <span class="loading-indicator" *ngIf="isLoading" aria-live="polite">
-        <i class="icon-loader spinning" aria-hidden="true"></i>
-        Loading...
-      </span>
-    </div>
+  <div class="loading" *ngIf="loading">Loading users...</div>
 
-    <div class="results-actions">
-      <div class="sort-controls">
-        <label for="sort-select" class="sr-only">Sort by</label>
-        <select 
-          id="sort-select"
-          class="sort-select"
-          [value]="sortBy"
-          (change)="onSortChange($event)">
-          <option value="name">Name</option>
-          <option value="email">Email</option>
-          <option value="role">Role</option>
-          <option value="status">Status</option>
-          <option value="createdAt">Created Date</option>
-          <option value="lastLogin">Last Login</option>
-        </select>
-        <button 
-          type="button"
-          class="sort-direction-btn"
-          (click)="toggleSortDirection()"
-          [attr.aria-label]="'Sort ' + (sortDirection === 'asc' ? 'ascending' : 'descending')">
-          <i 
-            class="icon-arrow"
-            [class.rotate-180]="sortDirection === 'desc'"
-            aria-hidden="true"></i>
-        </button>
-      </div>
-
-      <div class="view-controls">
-        <button 
-          type="button"
-          class="view-btn"
-          [class.active]="viewMode === 'grid'"
-          (click)="setViewMode('grid')"
-          aria-label="Grid view">
-          <i class="icon-grid" aria-hidden="true"></i>
-        </button>
-        <button 
-          type="button"
-          class="view-btn"
-          [class.active]="viewMode === 'list'"
-          (click)="setViewMode('list')"
-          aria-label="List view">
-          <i class="icon-list" aria-hidden="true"></i>
-        </button>
-      </div>
-    </div>
+  <div class="no-data" *ngIf="!loading && filteredUsers.length === 0 && !hasActiveFilters">
+    No users found. Create one above!
   </div>
 
-  <!-- Bulk Actions -->
-  <div class="bulk-actions" *ngIf="selectedUsers.length > 0">
-    <div class="bulk-selection-info">
-      <span>{{ selectedUsers.length }} user(s) selected</span>
-      <button 
-        type="button"
-        class="btn btn-link"
-        (click)="selectAll()"
-        *ngIf="selectedUsers.length < filteredUsers.length">
-        Select all {{ filteredUsers.length }}
-      </button>
-      <button 
-        type="button"
-        class="btn btn-link"
-        (click)="clearSelection()">
-        Clear selection
-      </button>
-    </div>
-    <div class="bulk-action-buttons">
-      <button 
-        type="button"
-        class="btn btn-secondary"
-        (click)="bulkActivate()"
-        [disabled]="isBulkActionRunning">
-        Activate
-      </button>
-      <button 
-        type="button"
-        class="btn btn-secondary"
-        (click)="bulkDeactivate()"
-        [disabled]="isBulkActionRunning">
-        Deactivate
-      </button>
-      <button 
-        type="button"
-        class="btn btn-danger"
-        (click)="bulkDelete()"
-        [disabled]="isBulkActionRunning">
-        Delete
-      </button>
-    </div>
-  </div>
-
-  <!-- User List/Grid -->
-  <div class="user-list-content" [class.grid-view]="viewMode === 'grid'">
-    <!-- Empty State -->
-    <div class="empty-state" *ngIf="filteredUsers.length === 0 && !isLoading">
-      <div class="empty-state-icon">
-        <i class="icon-users" aria-hidden="true"></i>
-      </div>
-      <h3 class="empty-state-title">
-        {{ hasActiveFilters ? 'No users match your filters' : 'No users found' }}
-      </h3>
-      <p class="empty-state-description">
-        {{ hasActiveFilters ? 'Try adjusting your filter criteria or clearing filters.' : 'Get started by adding your first user.' }}
-      </p>
-      <button 
-        type="button"
-        class="btn btn-primary"
-        *ngIf="!hasActiveFilters"
-        (click)="onAddUser()">
-        Add First User
-      </button>
-      <button 
-        type="button"
-        class="btn btn-secondary"
-        *ngIf="hasActiveFilters"
-        (click)="clearAllFilters()">
+  <div class="no-results" *ngIf="!loading && filteredUsers.length === 0 && hasActiveFilters">
+    <div class="no-results-content">
+      <p>No users match your current filters.</p>
+      <button class="btn btn-secondary" (click)="onClearFilter()">
         Clear Filters
       </button>
     </div>
-
-    <!-- User Items -->
-    <div 
-      class="user-item"
-      *ngFor="let user of filteredUsers; trackBy: trackByUserId; let i = index"
-      [attr.aria-posinset]="i + 1"
-      [attr.aria-setsize]="filteredUsers.length">
-      
-      <div class="user-item-checkbox">
-        <input 
-          type="checkbox"
-          [id]="'user-checkbox-' + user.id"
-          class="user-checkbox"
-          [checked]="isUserSelected(user.id)"
-          (change)="toggleUserSelection(user.id, $event)"
-          [attr.aria-label]="'Select user ' + user.name">
-      </div>
-
-      <div class="user-item-avatar">
-        <img 
-          [src]="user.avatar || '/assets/images/default-avatar.png'"
-          [alt]="user.name + ' avatar'"
-          class="user-avatar"
-          loading="lazy">
-        <div class="user-status-indicator" [class]="'status-' + user.status">
-          <span class="sr-only">{{ user.status }}</span>
-        </div>
-      </div>
-
-      <div class="user-item-info">
-        <div class="user-primary-info">
-          <h3 class="user-name">
-            <a 
-              [routerLink]="['/users', user.id]"
-              class="user-name-link"
-              [attr.aria-label]="'View details for ' + user.name">
-              {{ user.name }}
-            </a>
-          </h3>
-          <span class="user-role" [class]="'role-' + user.role">{{ user.role | titlecase }}</span>
-        </div>
-        <div class="user-secondary-info">
-          <span class="user-email">
-            <i class="icon-mail" aria-hidden="true"></i>
-            {{ user.email }}
-          </span>
-          <span class="user-department" *ngIf="user.department">
-            <i class="icon-building" aria-hidden="true"></i>
-            {{ user.department }}
-          </span>
-        </div>
-        <div class="user-meta-info">
-          <span class="user-created-date">
-            Created: {{ user.createdAt | date:'short' }}
-          </span>
-          <span class="user-last-login" *ngIf="user.lastLogin">
-            Last login: {{ user.lastLogin | date:'short' }}
-          </span>
-        </div>
-      </div>
-
-      <div class="user-item-actions">
-        <button 
-          type="button"
-          class="btn btn-sm btn-secondary"
-          (click)="onEditUser(user)"
-          [attr.aria-label]="'Edit ' + user.name">
-          <i class="icon-edit" aria-hidden="true"></i>
-          Edit
-        </button>
-        <button 
-          type="button"
-          class="btn btn-sm"
-          [class.btn-success]="user.status === 'inactive'"
-          [class.btn-warning]="user.status === 'active'"
-          (click)="onToggleUserStatus(user)"
-          [attr.aria-label]="(user.status === 'active' ? 'Deactivate' : 'Activate') + ' ' + user.name">
-          <i 
-            [class.icon-play]="user.status === 'inactive'"
-            [class.icon-pause]="user.status === 'active'"
-            aria-hidden="true"></i>
-          {{ user.status === 'active' ? 'Deactivate' : 'Activate' }}
-        </button>
-        <button 
-          type="button"
-          class="btn btn-sm btn-danger"
-          (click)="onDeleteUser(user)"
-          [attr.aria-label]="'Delete ' + user.name">
-          <i class="icon-trash" aria-hidden="true"></i>
-          Delete
-        </button>
-      </div>
-    </div>
   </div>
 
-  <!-- Pagination -->
-  <div class="pagination-wrapper" *ngIf="totalPages > 1">
-    <nav aria-label="User list pagination">
-      <div class="pagination-info">
-        Showing {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, totalUsers) }} of {{ totalUsers }} users
-      </div>
-      <div class="pagination-controls">
-        <button 
-          type="button"
-          class="btn btn-sm btn-secondary"
-          (click)="goToPage(1)"
-          [disabled]="currentPage === 1"
-          aria-label="Go to first page">
-          <i class="icon-chevron-double-left" aria-hidden="true"></i>
-        </button>
-        <button 
-          type="button"
-          class="btn btn-sm btn-secondary"
-          (click)="goToPage(currentPage - 1)"
-          [disabled]="currentPage === 1"
-          aria-label="Go to previous page">
-          <i class="icon-chevron-left" aria-hidden="true"></i>
-        </button>
-        
-        <div class="page-numbers">
-          <button 
-            type="button"
-            *ngFor="let page of visiblePages"
-            class="btn btn-sm"
-            [class.btn-primary]="page === currentPage"
-            [class.btn-secondary]="page !== currentPage"
-            (click)="goToPage(page)"
-            [attr.aria-label]="'Go to page ' + page"
-            [attr.aria-current]="page === currentPage ? 'page' : null">
-            {{ page }}
-          </button>
-        </div>
-
-        <button 
-          type="button"
-          class="btn btn-sm btn-secondary"
-          (click)="goToPage(currentPage + 1)"
-          [disabled]="currentPage === totalPages"
-          aria-label="Go to next page">
-          <i class="icon-chevron-right" aria-hidden="true"></i>
-        </button>
-        <button 
-          type="button"
-          class="btn btn-sm btn-secondary"
-          (click)="goToPage(totalPages)"
-          [disabled]="currentPage === totalPages"
-          aria-label="Go to last page">
-          <i class="icon-chevron-double-right" aria-hidden="true"></i>
-        </button>
-      </div>
-      <div class="page-size-controls">
-        <label for="page-size-select" class="page-size-label">Items per page:</label>
-        <select 
-          id="page-size-select"
-          class="page-size-select"
-          [value]="pageSize"
-          (change)="onPageSizeChange($event)">
-          <option value="10">10</option>
-          <option value="25">25</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
-      </div>
-    </nav>
+  <div class="table-container" *ngIf="!loading && filteredUsers.length > 0">
+    <table>
+      <thead>
+        <tr>
+          <th class="sortable" 
+              (click)="onSort('name')"
+              [class.sort-asc]="sortField === 'name' && sortDirection === 'asc'"
+              [class.sort-desc]="sortField === 'name' && sortDirection === 'desc'">
+            Name
+            <span class="sort-indicator" *ngIf="sortField === 'name'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+          </th>
+          <th class="sortable"
+              (click)="onSort('email')"
+              [class.sort-asc]="sortField === 'email' && sortDirection === 'asc'"
+              [class.sort-desc]="sortField === 'email' && sortDirection === 'desc'">
+            Email
+            <span class="sort-indicator" *ngIf="sortField === 'email'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+          </th>
+          <th class="sortable"
+              (click)="onSort('role')"
+              [class.sort-asc]="sortField === 'role' && sortDirection === 'asc'"
+              [class.sort-desc]="sortField === 'role' && sortDirection === 'desc'">
+            Role
+            <span class="sort-indicator" *ngIf="sortField === 'role'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+          </th>
+          <th class="sortable"
+              (click)="onSort('createdAt')"
+              [class.sort-asc]="sortField === 'createdAt' && sortDirection === 'asc'"
+              [class.sort-desc]="sortField === 'createdAt' && sortDirection === 'desc'">
+            Created
+            <span class="sort-indicator" *ngIf="sortField === 'createdAt'">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
+          </th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <app-user-table-row 
+          *ngFor="let user of filteredUsers; trackBy: trackByUserId"
+          [user]="user"
+          [highlightFields]="getHighlightFields()"
+          (edit)="onEdit($event)"
+          (delete)="onDelete($event)">
+        </app-user-table-row>
+      </tbody>
+    </table>
   </div>
 
-  <!-- Loading Overlay -->
-  <div class="loading-overlay" *ngIf="isLoading" aria-live="polite">
-    <div class="loading-spinner">
-      <i class="icon-loader spinning" aria-hidden="true"></i>
-      <span>Loading users...</span>
-    </div>
+  <!-- Bulk Actions for filtered results -->
+  <div class="bulk-actions" *ngIf="filteredUsers.length > 0 && hasActiveFilters">
+    <span class="bulk-info">{{ filteredUsers.length }} users selected by filters</span>
+    <button class="btn btn-bulk" (click)="onBulkExport()">
+      📊 Export Filtered
+    </button>
   </div>
 </div>
