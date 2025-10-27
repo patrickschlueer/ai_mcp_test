@@ -1,0 +1,283 @@
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.user-table th,
+.user-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.user-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+  color: #333333;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.user-table tr:hover {
+  background-color: #f9f9f9;
+}
+
+.user-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Header mit Sortierung */
+.sortable-header {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  transition: background-color 0.2s ease;
+}
+
+.sortable-header:hover {
+  background-color: #e8e8e8;
+}
+
+.sort-icon {
+  margin-left: 8px;
+  font-size: 12px;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.sortable-header.active .sort-icon {
+  opacity: 1;
+  color: #2196f3;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-active {
+  background-color: #e8f5e8;
+  color: #2e7d32;
+}
+
+.status-inactive {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.status-pending {
+  background-color: #fff3e0;
+  color: #ef6c00;
+}
+
+/* Role Badge */
+.role-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.role-admin {
+  background-color: #fce4ec;
+  color: #ad1457;
+}
+
+.role-moderator {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: transparent;
+  color: #666666;
+}
+
+.action-btn:hover {
+  background-color: #f0f0f0;
+  color: #333333;
+}
+
+.action-btn.primary {
+  background-color: #2196f3;
+  color: white;
+}
+
+.action-btn.primary:hover {
+  background-color: #1976d2;
+}
+
+.action-btn.danger {
+  color: #d32f2f;
+}
+
+.action-btn.danger:hover {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+/* Loading State */
+.loading-overlay {
+  position: relative;
+}
+
+.loading-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #e0e0e0;
+  border-top: 2px solid #2196f3;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666666;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  color: #cccccc;
+  margin-bottom: 16px;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 14px;
+  color: #999999;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .user-table {
+    font-size: 14px;
+  }
+  
+  .user-table th,
+  .user-table td {
+    padding: 8px 12px;
+  }
+  
+  /* Stack layout für mobile */
+  .action-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .action-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  
+  .user-table th,
+  .user-table td {
+    min-width: 120px;
+    padding: 8px;
+  }
+}
+
+/* Accessibility */
+.user-table:focus-within {
+  outline: 2px solid #2196f3;
+  outline-offset: 2px;
+}
+
+.sortable-header:focus {
+  outline: 2px solid #2196f3;
+  outline-offset: -2px;
+}
+
+.action-btn:focus {
+  outline: 2px solid #2196f3;
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .user-table {
+    border: 2px solid #000000;
+  }
+  
+  .user-table th,
+  .user-table td {
+    border-bottom: 2px solid #000000;
+  }
+  
+  .status-badge,
+  .role-badge {
+    border: 1px solid currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .sortable-header,
+  .action-btn,
+  .sort-icon {
+    transition: none;
+  }
+  
+  .loading-spinner {
+    animation: none;
+  }
+}
