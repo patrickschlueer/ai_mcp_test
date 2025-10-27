@@ -1,0 +1,252 @@
+<div class="filter-container">
+  <!-- Quick Filters Section -->
+  <div class="quick-filters-section">
+    <h3 class="filter-section-title">Quick Filters</h3>
+    <div class="quick-filters-buttons">
+      <button 
+        type="button"
+        class="quick-filter-btn"
+        [class.active]="activeQuickFilter === 'all'"
+        (click)="onQuickFilter('all')"
+        aria-label="Show all users">
+        All Users
+      </button>
+      <button 
+        type="button"
+        class="quick-filter-btn"
+        [class.active]="activeQuickFilter === 'active'"
+        (click)="onQuickFilter('active')"
+        aria-label="Show active users only">
+        Active Only
+      </button>
+      <button 
+        type="button"
+        class="quick-filter-btn"
+        [class.active]="activeQuickFilter === 'inactive'"
+        (click)="onQuickFilter('inactive')"
+        aria-label="Show inactive users only">
+        Inactive Only
+      </button>
+      <button 
+        type="button"
+        class="quick-filter-btn"
+        [class.active]="activeQuickFilter === 'admins'"
+        (click)="onQuickFilter('admins')"
+        aria-label="Show admin users only">
+        Admins Only
+      </button>
+    </div>
+  </div>
+
+  <!-- Advanced Filters Section -->
+  <div class="advanced-filters-section">
+    <div class="section-header">
+      <h3 class="filter-section-title">Advanced Filters</h3>
+      <button 
+        type="button"
+        class="toggle-btn"
+        (click)="toggleAdvancedFilters()"
+        [attr.aria-expanded]="showAdvancedFilters"
+        aria-label="Toggle advanced filters">
+        <span class="toggle-icon" [class.rotated]="showAdvancedFilters">▼</span>
+      </button>
+    </div>
+
+    <div class="advanced-filters-content" [class.expanded]="showAdvancedFilters">
+      <!-- Name Filter -->
+      <div class="filter-group">
+        <label for="name-filter" class="filter-label">Search by Name:</label>
+        <div class="input-wrapper">
+          <input 
+            id="name-filter"
+            type="text"
+            class="filter-input"
+            placeholder="Enter user name..."
+            [(ngModel)]="filters.name"
+            (input)="onFilterChange()"
+            [attr.aria-describedby]="filters.name ? 'name-filter-clear' : null">
+          <button 
+            *ngIf="filters.name"
+            id="name-filter-clear"
+            type="button"
+            class="clear-btn"
+            (click)="clearNameFilter()"
+            aria-label="Clear name filter">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Email Filter -->
+      <div class="filter-group">
+        <label for="email-filter" class="filter-label">Search by Email:</label>
+        <div class="input-wrapper">
+          <input 
+            id="email-filter"
+            type="email"
+            class="filter-input"
+            placeholder="Enter email address..."
+            [(ngModel)]="filters.email"
+            (input)="onFilterChange()"
+            [attr.aria-describedby]="filters.email ? 'email-filter-clear' : null">
+          <button 
+            *ngIf="filters.email"
+            id="email-filter-clear"
+            type="button"
+            class="clear-btn"
+            (click)="clearEmailFilter()"
+            aria-label="Clear email filter">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Role Filter -->
+      <div class="filter-group">
+        <label for="role-filter" class="filter-label">Filter by Role:</label>
+        <div class="select-wrapper">
+          <select 
+            id="role-filter"
+            class="filter-select"
+            [(ngModel)]="filters.role"
+            (change)="onFilterChange()"
+            aria-label="Select user role">
+            <option value="">All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+            <option value="moderator">Moderator</option>
+            <option value="guest">Guest</option>
+          </select>
+          <span class="select-arrow">▼</span>
+        </div>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="filter-group">
+        <label for="status-filter" class="filter-label">Filter by Status:</label>
+        <div class="select-wrapper">
+          <select 
+            id="status-filter"
+            class="filter-select"
+            [(ngModel)]="filters.status"
+            (change)="onFilterChange()"
+            aria-label="Select user status">
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="pending">Pending</option>
+            <option value="suspended">Suspended</option>
+          </select>
+          <span class="select-arrow">▼</span>
+        </div>
+      </div>
+
+      <!-- Date Range Filter -->
+      <div class="filter-group date-range-group">
+        <label class="filter-label">Registration Date Range:</label>
+        <div class="date-range-inputs">
+          <div class="date-input-wrapper">
+            <label for="date-from" class="sr-only">From date</label>
+            <input 
+              id="date-from"
+              type="date"
+              class="filter-input date-input"
+              placeholder="From"
+              [(ngModel)]="filters.dateFrom"
+              (change)="onFilterChange()"
+              [max]="filters.dateTo || maxDate">
+            <span class="date-label">From</span>
+          </div>
+          <div class="date-separator">–</div>
+          <div class="date-input-wrapper">
+            <label for="date-to" class="sr-only">To date</label>
+            <input 
+              id="date-to"
+              type="date"
+              class="filter-input date-input"
+              placeholder="To"
+              [(ngModel)]="filters.dateTo"
+              (change)="onFilterChange()"
+              [min]="filters.dateFrom"
+              [max]="maxDate">
+            <span class="date-label">To</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Actions -->
+  <div class="filter-actions">
+    <div class="results-info">
+      <span class="results-count" *ngIf="filteredCount !== undefined">
+        Showing {{ filteredCount }} of {{ totalCount }} users
+      </span>
+    </div>
+    
+    <div class="action-buttons">
+      <button 
+        type="button"
+        class="action-btn secondary"
+        (click)="onResetFilters()"
+        [disabled]="!hasActiveFilters"
+        aria-label="Reset all filters">
+        Reset Filters
+      </button>
+      
+      <button 
+        type="button"
+        class="action-btn primary"
+        (click)="onSaveFilterPreset()"
+        [disabled]="!hasActiveFilters"
+        aria-label="Save current filter as preset">
+        Save as Preset
+      </button>
+    </div>
+  </div>
+
+  <!-- Filter Presets -->
+  <div class="filter-presets-section" *ngIf="filterPresets && filterPresets.length > 0">
+    <h4 class="presets-title">Saved Filter Presets</h4>
+    <div class="presets-list">
+      <div 
+        *ngFor="let preset of filterPresets; trackBy: trackPreset"
+        class="preset-item"
+        [class.active]="activePresetId === preset.id">
+        <button 
+          type="button"
+          class="preset-btn"
+          (click)="onApplyPreset(preset)"
+          [attr.aria-label]="'Apply filter preset: ' + preset.name">
+          {{ preset.name }}
+        </button>
+        <button 
+          type="button"
+          class="preset-delete-btn"
+          (click)="onDeletePreset(preset.id)"
+          [attr.aria-label]="'Delete filter preset: ' + preset.name">
+          ✕
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="isLoading" role="status" aria-live="polite">
+    <div class="loading-spinner"></div>
+    <span class="loading-text">Applying filters...</span>
+  </div>
+
+  <!-- Error State -->
+  <div class="error-state" *ngIf="errorMessage" role="alert" aria-live="assertive">
+    <span class="error-icon">⚠️</span>
+    <span class="error-text">{{ errorMessage }}</span>
+    <button 
+      type="button"
+      class="error-dismiss-btn"
+      (click)="dismissError()"
+      aria-label="Dismiss error message">
+      ✕
+    </button>
+  </div>
+</div>
