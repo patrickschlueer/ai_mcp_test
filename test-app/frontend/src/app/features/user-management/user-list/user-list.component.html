@@ -1,18 +1,43 @@
 <div class="card">
   <div class="card-header">
-    <h2>Users ({{ users.length }})</h2>
-    <button class="btn btn-refresh" (click)="onRefresh()">
-      🔄 Refresh
-    </button>
+    <div class="header-left">
+      <h2>Users ({{ (filteredUsers$ | async)?.length || 0 }})</h2>
+    </div>
+    <div class="header-right">
+      <div class="search-container">
+        <input 
+          type="text" 
+          class="search-input"
+          placeholder="Search users..."
+          [formControl]="searchControl"
+          aria-label="Search users by name, email or role">
+        <span class="search-icon">🔍</span>
+        <button 
+          *ngIf="searchControl.value" 
+          class="clear-search-btn"
+          (click)="clearSearch()"
+          aria-label="Clear search">
+          ✕
+        </button>
+      </div>
+      <button class="btn btn-refresh" (click)="onRefresh()">
+        🔄 Refresh
+      </button>
+    </div>
   </div>
 
   <div class="loading" *ngIf="loading">Loading users...</div>
 
-  <div class="no-data" *ngIf="!loading && users.length === 0">
+  <div class="no-data" *ngIf="!loading && (filteredUsers$ | async)?.length === 0 && !searchControl.value">
     No users found. Create one above!
   </div>
 
-  <table *ngIf="!loading && users.length > 0">
+  <div class="no-search-results" *ngIf="!loading && (filteredUsers$ | async)?.length === 0 && searchControl.value">
+    No users found matching "{{ searchControl.value }}". 
+    <button class="link-btn" (click)="clearSearch()">Clear search</button>
+  </div>
+
+  <table *ngIf="!loading && (filteredUsers$ | async)?.length > 0">
     <thead>
       <tr>
         <th>Name</th>
@@ -24,7 +49,7 @@
     </thead>
     <tbody>
       <app-user-table-row 
-        *ngFor="let user of users"
+        *ngFor="let user of (filteredUsers$ | async)"
         [user]="user"
         (edit)="onEdit($event)"
         (delete)="onDelete($event)">
