@@ -1,0 +1,18 @@
+<tr>
+  <td><strong>{{ user.name }}</strong></td>
+  <td>{{ user.email }}</td>
+  <td>
+    <span class="badge" [class.badge-admin]="user.role === 'Admin'">
+      {{ user.role }}
+    </span>
+  </td>
+  <td>{{ formatDate(user.createdAt) }}</td>
+  <td class="actions">
+    <button class="btn btn-edit" (click)="onEdit()">
+      ✏️ Edit
+    </button>
+    <button class="btn btn-delete" (click)="onDelete()">
+      🗑️ Delete
+    </button>
+  </td>
+</tr>

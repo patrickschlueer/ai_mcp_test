@@ -1,0 +1,31 @@
+<div class="container">
+  <!-- Header (wiederverwendbar → /shared/) -->
+  <app-header 
+    title="🚀 User Management System"
+    subtitle="AI Agent PoC - CRUD Application">
+  </app-header>
+
+  <!-- Alert Messages (wiederverwendbar → /shared/) -->
+  <app-alert 
+    [message]="alertMessage" 
+    [type]="alertType" 
+    *ngIf="alertMessage">
+  </app-alert>
+
+  <!-- User Form (feature-spezifisch) -->
+  <app-user-form
+    [user]="currentUser"
+    [editMode]="editMode"
+    (save)="saveUser($event)"
+    (cancel)="cancelEdit()">
+  </app-user-form>
+
+  <!-- User List (feature-spezifisch) -->
+  <app-user-list
+    [users]="users"
+    [loading]="loading"
+    (edit)="editUser($event)"
+    (delete)="deleteUser($event)"
+    (refresh)="loadUsers()">
+  </app-user-list>
+</div>

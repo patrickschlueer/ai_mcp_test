@@ -9,6 +9,8 @@ dotenv.config();
  * 
  * ✅ Bearbeitet UI-Design Sub-Tasks
  * ✅ Analysiert Code und erstellt UI-Design Spezifikation
+ * ✅ Plant Component-Struktur im Vorfeld (welche Elemente = eigene Components)
+ * ✅ Gibt Splitting-Regeln vor (400-Zeilen-Limit, /shared/ vs /features/)
  * ✅ 3 Iterationen: Selbst-Review & Verbesserung
  * ✅ Dokumentiert finale Erkenntnisse im Parent-Task
  * 
@@ -17,6 +19,13 @@ dotenv.config();
  * - Backend: Node.js
  * - Datenbank: In-Memory Node.js
  * - 3rd Party Libs: KEINE (außer TPO weist es explizit an!)
+ * 
+ * 🏛️ COMPONENT-STRUKTUR PLANUNG:
+ * Der Designer plant bereits die Component-Architektur:
+ * - Identifiziert wiederverwendbare Components (→ /shared/)
+ * - Plant Component-Splits für komplexe Bereiche
+ * - Berücksichtigt 400-Zeilen-Regel
+ * - Gibt klare Struktur für Coder Agent vor
  */
 
 class UIDesignerAgent {
@@ -204,19 +213,48 @@ ${parentTask.description || ''}
 
 ${codeSection}
 
+=== TECH STACK ===
+- Frontend: Angular (Custom CSS, NO UI frameworks!)
+- Component Structure: Split into .ts, .html, .css files
+
 === AUFGABE ===
 Erstelle eine HIGH-LEVEL UI-Design Spezifikation (KEIN CODE!):
 
 1. **UI-Anforderungen**: Was muss die UI können? Welche User-Aktionen?
-2. **Wireframes (Textbeschreibung)**: Beschreibe das Layout in Prosa oder ASCII-Art
+
+2. **Component-Struktur** (KRITISCH!):
+   - Welche UI-Elemente sollten eigene Components sein?
+   - Gibt es wiederverwendbare Elemente? (→ /shared/)
+   - Gibt es komplexe Bereiche die zu splitten sind?
+   - Beispiel-Struktur:
+     * MainComponent (Container)
+       - HeaderComponent (wiederverwendbar → /shared/)
+       - SearchBarComponent (wiederverwendbar → /shared/)
+       - ResultListComponent (feature-spezifisch)
+         * ResultItemComponent (sub-component)
+       - FooterComponent (wiederverwendbar → /shared/)
+   
+   **Splitting-Regeln für Developer:**
+   - Jede Component: max 400 Zeilen (sonst splitten!)
+   - Wiederverwendbare UI-Elemente: eigene Components
+   - Komplexe Listen/Grids: Item-Components erstellen
+   - Formulare mit >5 Feldern: Section-Components
+   - Modale/Dialoge/Overlays: eigene Components
+
+3. **Wireframes (Textbeschreibung)**: Beschreibe das Layout in Prosa oder ASCII-Art
    - Keine React-Komponenten!
    - Keine TypeScript-Interfaces!
-   - Nur visuelle Beschreibung!
-3. **Visuelles Design**: Farben, Schriftgrößen, Abstände, Schatten
-4. **Interaktionen**: Was passiert bei Hover? Bei Click? User-Flows beschreiben
-5. **Responsive Verhalten**: Wie ändert sich die UI auf Mobile/Tablet/Desktop?
-6. **Accessibility-Konzept**: Welche ARIA-Labels? Keyboard-Navigation-Konzept?
-7. **Animations-Konzept**: Welche Übergänge? Timing?
+   - Nur visuelle Beschreibung mit Component-Hinweisen!
+
+4. **Visuelles Design**: Farben, Schriftgrößen, Abstände, Schatten
+
+5. **Interaktionen**: Was passiert bei Hover? Bei Click? User-Flows beschreiben
+
+6. **Responsive Verhalten**: Wie ändert sich die UI auf Mobile/Tablet/Desktop?
+
+7. **Accessibility-Konzept**: Welche ARIA-Labels? Keyboard-Navigation-Konzept?
+
+8. **Animations-Konzept**: Welche Übergänge? Timing?
 
 ⚠️ KRITISCH - ABSOLUT KEIN CODE:
 - ❌ KEINE TypeScript/JavaScript Interfaces oder Types!
@@ -224,7 +262,15 @@ Erstelle eine HIGH-LEVEL UI-Design Spezifikation (KEIN CODE!):
 - ❌ KEINE Props oder State-Definitionen!
 - ❌ KEINE Code-Snippets jeglicher Art!
 - ✅ NUR textuelle Beschreibungen und visuelle Konzepte!
+- ✅ ABER: Gib klare Component-Struktur vor (welche Teile = eigene Components)
 - ✅ Der Developer schreibt später den Code basierend auf deinem Design!
+
+**WICHTIG für Component-Struktur:**
+Denke wie ein Architekt! Identifiziere:
+- Was ist wiederverwendbar? → /shared/
+- Was ist zu komplex für eine Component? → Splitten!
+- Welche Listen brauchen Item-Components?
+- Welche Formulare brauchen Section-Components?
 
 Antworte direkt mit Markdown (KEIN JSON-Wrapper!).
 Halte dich kurz und prägnant - max. 2-3 Seiten!`;
@@ -274,17 +320,38 @@ ${currentDesign}
 
 === AUFGABE ===
 Reviewe KRITISCH das obige HIGH-LEVEL UI-Design und verbessere es:
-1. **User Experience**: Ist die UX intuitiv? Klare User-Flows?
-2. **Visuelles Konzept**: Ist das Design konsistent? Professionell?
-3. **Accessibility**: WCAG-konform? Keyboard-Navigation klar?
-4. **Responsive**: Funktioniert das Konzept auf allen Geräten?
-5. **Klarheit**: Ist alles klar genug beschrieben für Developer?
+
+1. **Component-Struktur**: 
+   - Sind alle Component-Splits sinnvoll identifiziert?
+   - Sind wiederverwendbare Components als /shared/ markiert?
+   - Fehlen Component-Splits für komplexe Bereiche?
+   - Sind die 400-Zeilen-Regel und Splitting-Guidelines berücksichtigt?
+
+2. **User Experience**: Ist die UX intuitiv? Klare User-Flows?
+
+3. **Visuelles Konzept**: Ist das Design konsistent? Professionell?
+
+4. **Accessibility**: WCAG-konform? Keyboard-Navigation klar?
+
+5. **Responsive**: Funktioniert das Konzept auf allen Geräten?
+
+6. **Klarheit für Developer**: 
+   - Ist die Component-Hierarchie klar?
+   - Sind alle Interaktionen beschrieben?
+   - Ist klar, welche Components wiederverwendbar sind?
 
 ⚠️ KRITISCH - ABSOLUT KEIN CODE:
 - ❌ Füge KEINE TypeScript/JavaScript Interfaces hinzu!
 - ❌ Füge KEINE React Component-Definitionen hinzu!
 - ❌ Füge KEINE Code-Snippets hinzu!
 - ✅ Bleibe bei textuellen Beschreibungen!
+- ✅ ABER: Präzisiere die Component-Struktur wenn nötig!
+
+**BESONDERS WICHTIG:**
+Stelle sicher, dass die Component-Struktur klar ist:
+- Welche Bereiche = eigene Components?
+- Was gehört nach /shared/?
+- Wo könnten Components zu groß werden?
 
 Antworte direkt mit dem verbesserten Markdown (KEIN JSON-Wrapper!).
 Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iteration" hinzu.`;

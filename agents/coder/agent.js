@@ -47,6 +47,38 @@ class CoderAgent {
       thirdPartyLibs: 'NONE (unless explicitly approved by TPO)'
     };
     
+    // Angular Best Practices & Architecture Rules
+    this.angularRules = {
+      componentStructure: {
+        rule: 'Split into .ts, .html, .css files',
+        detail: 'Use templateUrl and styleUrl, NO inline templates',
+        maxLines: 400,
+        enforcement: 'Components MUST be split when exceeding 400 lines'
+      },
+      componentOrganization: {
+        rule: 'Create reusable components in shared folder',
+        detail: 'Generic components (search, buttons, etc.) → /shared/',
+        enforcement: 'Check reusability before placing components'
+      },
+      fileOrganization: {
+        rule: 'One class per file, one interface per file',
+        detail: 'NO multiple classes/interfaces in same file',
+        enforcement: 'Each file serves ONE purpose only'
+      },
+      stateManagement: {
+        rule: 'Use NgRx from the start',
+        detail: 'RxJS + NgRx for ALL state management',
+        libraries: ['@ngrx/store', '@ngrx/effects', '@ngrx/entity'],
+        enforcement: 'NO component-level state for shared data'
+      },
+      testing: {
+        rule: 'EVERY file must have tests',
+        detail: 'Unit tests (.spec.ts) + E2E tests (when applicable)',
+        coverage: 'Minimum: test core functionality',
+        enforcement: 'PR cannot be approved without tests'
+      }
+    };
+    
     console.log(`${this.emoji} ${this.name} initialized`);
     console.log(`   Tech Stack:`);
     console.log(`     Frontend: ${this.techStack.frontend}`);
@@ -309,8 +341,41 @@ ${context.files.map(f => `- ${f.path} (${f.size} bytes)`).join('\n')}
 - Database: In-Memory
 - 3rd Party: NONE
 
+=== ANGULAR ARCHITECTURE RULES ===
+**Component Structure:**
+- Split EVERY component into .ts, .html, .css files
+- Use templateUrl and styleUrl (NO inline templates!)
+- Max 400 lines per component - split into smaller components if longer
+
+**Component Organization:**
+- Reusable components → /shared/ folder (search bars, buttons, etc.)
+- Feature-specific → /features/[feature-name]/
+- Check: Can this component be reused elsewhere?
+
+**File Organization:**
+- ONE class per file
+- ONE interface per file
+- NO grouping multiple classes/interfaces together
+
+**State Management:**
+- Use NgRx from the start (@ngrx/store, @ngrx/effects, @ngrx/entity)
+- RxJS for reactive programming
+- NO component-level state for shared data
+
+**Testing (MANDATORY):**
+- EVERY component needs .spec.ts file
+- EVERY service needs .spec.ts file
+- Test core functionality (not 100%, but basics)
+- E2E tests for critical user flows
+
 === AUFGABE ===
 Erstelle einen Implementierungsplan. Welche Files müssen geändert werden?
+
+**WICHTIG:**
+- Beachte die 400-Zeilen-Regel für Components!
+- Erstelle IMMER separate .ts, .html, .css Files
+- Erstelle IMMER .spec.ts Test-Files
+- Prüfe ob NgRx Store/Effects/Actions benötigt werden
 
 Antworte NUR mit JSON:
 
@@ -356,9 +421,98 @@ Antworte NUR mit JSON:
   }
 
   /**
-   * SCHRITT 2: Implementiere EINE einzelne Datei
+   * 🛡️ FALLBACK: Splitte große Datei in kleinere Chunks
    */
-  async implementSingleFile(fileToModify, ticket, context) {
+  async implementFileInChunks(fileToModify, ticket, context, existingContent) {
+    console.log(`\n${this.emoji} ⚠️  File too large, splitting into chunks...`);
+    
+    // Bestimme wie viele Chunks wir brauchen (basierend auf existierendem Content)
+    const lines = existingContent.split('\n');
+    const chunkSize = Math.min(100, Math.ceil(lines.length / 3)); // Max 3 Chunks
+    const chunks = [];
+    
+    for (let i = 0; i < lines.length; i += chunkSize) {
+      chunks.push({
+        startLine: i + 1,
+        endLine: Math.min(i + chunkSize, lines.length),
+        content: lines.slice(i, i + chunkSize).join('\n')
+      });
+    }
+    
+    console.log(`   📦 Splitting into ${chunks.length} chunk(s)`);
+    
+    // Implementiere jeden Chunk einzeln
+    const modifiedChunks = [];
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      
+      const prompt = `Du bist ein Senior Developer. Modifiziere NUR DIESEN CHUNK der Datei.
+
+=== FILE INFO ===
+Path: ${fileToModify.path}
+Chunk ${i + 1}/${chunks.length} (Lines ${chunk.startLine}-${chunk.endLine})
+
+=== TICKET ===
+${ticket.key}: ${ticket.summary}
+
+=== ÄNDERUNGSGRUND ===
+${fileToModify.reason}
+
+=== CHUNK CONTENT ===
+${chunk.content}
+
+=== VORHERIGER CHUNK ===
+${modifiedChunks[i - 1] || 'N/A'}
+
+=== AUFGABE ===
+Modifiziere DIESEN Chunk basierend auf den Anforderungen.
+
+WICHTIG:
+- Behalte alle Imports/Dependencies bei
+- Ändere nur was nötig ist für ${fileToModify.reason}
+- Gib den KOMPLETTEN modifizierten Chunk zurück
+
+Antworte NUR mit dem Code (KEIN JSON, KEIN Markdown):`;
+
+      try {
+        const message = await this.anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4000,
+          messages: [{ role: 'user', content: prompt }]
+        });
+
+        let chunkResult = message.content[0].text.trim();
+        
+        // Remove markdown code blocks if present
+        chunkResult = chunkResult.replace(/```[a-z]*\n?/g, '').replace(/```\n?/g, '').trim();
+        
+        modifiedChunks.push(chunkResult);
+        console.log(`   ✅ Chunk ${i + 1}/${chunks.length} modified`);
+        
+        // Kurze Pause zwischen Chunks
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+      } catch (error) {
+        console.error(`   ❌ Chunk ${i + 1} failed: ${error.message}`);
+        // Verwende Original-Chunk als Fallback
+        modifiedChunks.push(chunk.content);
+      }
+    }
+    
+    // Kombiniere alle Chunks
+    const finalContent = modifiedChunks.join('\n');
+    
+    return {
+      content: finalContent,
+      changes: `Modified in ${chunks.length} chunks due to size`
+    };
+  }
+
+  /**
+   * SCHRITT 2: Implementiere EINE einzelne Datei (mit Retry-Logik)
+   */
+  async implementSingleFile(fileToModify, ticket, context, retryCount = 0) {
     console.log(`\n${this.emoji} Implementing ${fileToModify.path}...`);
     
     await this.sendEvent({
@@ -397,6 +551,30 @@ ${this.extractSection(ticket.description, '🎨 UI-Design')?.substring(0, 1000) 
 - Database: In-Memory
 - 3rd Party: NONE
 
+=== ANGULAR ARCHITECTURE RULES ===
+**Component Structure:**
+- ALWAYS split into .ts, .html, .css (use templateUrl/styleUrl)
+- Max 400 lines - if longer, split into smaller components
+- NO inline templates or styles
+
+**Component Organization:**
+- Reusable (search, buttons) → /shared/
+- Feature-specific → /features/[name]/
+
+**File Organization:**
+- ONE class per file, ONE interface per file
+- No multiple classes/interfaces in same file
+
+**State Management:**
+- Use NgRx (@ngrx/store, effects, entity)
+- RxJS for reactive code
+- NO component state for shared data
+
+**Testing (MANDATORY):**
+- Create .spec.ts for this file
+- Test core functionality
+- Include in implementation
+
 === AUFGABE ===
 Generiere den KOMPLETTEN neuen Content für diese Datei.
 
@@ -428,13 +606,21 @@ Antworte NUR mit JSON:
       // Robust JSON extraction
       responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       
+      // Versuche JSON zu extrahieren
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON found');
+      if (!jsonMatch) {
+        throw new Error('No JSON found in response');
+      }
       
       const result = JSON.parse(jsonMatch[0]);
       
+      // Validiere result
+      if (!result.content) {
+        throw new Error('JSON missing content field');
+      }
+      
       console.log(`   ✅ ${fileToModify.path} implemented`);
-      console.log(`   📝 Changes: ${result.changes}`);
+      console.log(`   📝 Changes: ${result.changes || 'Changes applied'}`);
       
       return {
         path: fileToModify.path,
@@ -445,7 +631,82 @@ Antworte NUR mit JSON:
       
     } catch (error) {
       console.error(`   ❌ Failed to implement ${fileToModify.path}: ${error.message}`);
-      throw error;
+      
+      // 🛡️ FEHLERBEHANDLUNG
+      
+      // Fall 1: JSON Parse Error oder zu großer Output
+      if (error.message.includes('JSON') || 
+          error.message.includes('Unexpected token') ||
+          error.message.includes('Unterminated string') ||
+          retryCount === 0) {
+        
+        console.log(`   🔄 Retry Strategy: Using chunk-based approach...`);
+        
+        // Verwende Chunk-basierte Implementierung
+        try {
+          const chunkResult = await this.implementFileInChunks(
+            fileToModify, 
+            ticket, 
+            context, 
+            existingContent || ''
+          );
+          
+          return {
+            path: fileToModify.path,
+            action: fileToModify.action,
+            content: chunkResult.content,
+            reason: fileToModify.reason
+          };
+          
+        } catch (chunkError) {
+          console.error(`   ❌ Chunk-based retry also failed: ${chunkError.message}`);
+        }
+      }
+      
+      // Fall 2: Anderer Fehler - einfach neu versuchen mit kürzerem Prompt
+      if (retryCount < 1) {
+        console.log(`   🔄 Retry ${retryCount + 1}/1 with simplified prompt...`);
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Vereinfachte Version des Prompts (ohne viel Kontext)
+        const simplePrompt = `Implementiere folgende Änderung:
+
+File: ${fileToModify.path}
+Action: ${fileToModify.action}
+Reason: ${fileToModify.reason}
+
+Existing Content:
+${existingContent.substring(0, 3000) || '(new file)'}
+
+Gib NUR den neuen File-Content zurück. Kein JSON, nur reiner Code.`;
+        
+        try {
+          const retryMessage = await this.anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 6000,
+            messages: [{ role: 'user', content: simplePrompt }]
+          });
+          
+          let retryContent = retryMessage.content[0].text.trim();
+          retryContent = retryContent.replace(/```[a-z]*\n?/g, '').replace(/```\n?/g, '').trim();
+          
+          console.log(`   ✅ Retry successful!`);
+          
+          return {
+            path: fileToModify.path,
+            action: fileToModify.action,
+            content: retryContent,
+            reason: fileToModify.reason
+          };
+          
+        } catch (retryError) {
+          console.error(`   ❌ Retry failed: ${retryError.message}`);
+        }
+      }
+      
+      // Fall 3: Alle Versuche fehlgeschlagen
+      throw new Error(`All retry attempts failed for ${fileToModify.path}`);
     }
   }
 

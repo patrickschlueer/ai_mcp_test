@@ -45,6 +45,38 @@ class ReviewAgent {
       thirdPartyLibs: 'NONE (unless explicitly approved by TPO)'
     };
     
+    // Angular Best Practices & Architecture Rules
+    this.angularRules = {
+      componentStructure: {
+        rule: 'Split into .ts, .html, .css files',
+        detail: 'Use templateUrl and styleUrl, NO inline templates',
+        maxLines: 400,
+        enforcement: 'REJECT PR if components exceed 400 lines'
+      },
+      componentOrganization: {
+        rule: 'Reusable components in shared folder',
+        detail: 'Generic components (search, buttons, etc.) → /shared/',
+        enforcement: 'REJECT if reusable component not in /shared/'
+      },
+      fileOrganization: {
+        rule: 'One class per file, one interface per file',
+        detail: 'NO multiple classes/interfaces in same file',
+        enforcement: 'REJECT if multiple classes/interfaces found'
+      },
+      stateManagement: {
+        rule: 'Use NgRx from the start',
+        detail: 'RxJS + NgRx for ALL state management',
+        libraries: ['@ngrx/store', '@ngrx/effects', '@ngrx/entity'],
+        enforcement: 'REJECT if component-level state for shared data'
+      },
+      testing: {
+        rule: 'EVERY file MUST have tests',
+        detail: 'Unit tests (.spec.ts) + E2E tests (when applicable)',
+        coverage: 'Minimum: test core functionality',
+        enforcement: 'REJECT PR if files missing .spec.ts tests'
+      }
+    };
+    
     console.log(`${this.emoji} ${this.name} initialized`);
     console.log(`   Max review iterations: ${this.maxIterations}`);
     console.log(`   Tech Stack:`);
@@ -223,9 +255,42 @@ ${changesContext}
 - KEINE echte Datenbank
 
 **3rd Party Libraries:**
-- KEINE zusätzlichen npm packages
+- KEINE zusätzlichen npm packages (außer NgRx!)
 - KEINE externen Libraries
-- Nur eingebaute Node.js/Angular Module
+- Nur eingebaute Node.js/Angular Module + NgRx
+
+=== ANGULAR ARCHITECTURE RULES (CRITICAL!) ===
+
+**🔴 CRITICAL - Component Structure:**
+- Components MUST be split into .ts, .html, .css files
+- MUST use templateUrl and styleUrl (NO inline templates/styles!)
+- Components MUST NOT exceed 400 lines
+- If >400 lines → MUST split into smaller components
+- Prüfe: Ist die Component sinnvoll aufgeteilt?
+
+**🔴 CRITICAL - Testing:**
+- EVERY .ts file MUST have a .spec.ts test file
+- Components without .spec.ts → AUTOMATIC REJECT
+- Services without .spec.ts → AUTOMATIC REJECT
+- Minimum: Test core functionality (not 100%, but basics)
+- Check: Sind die Tests sinnvoll oder nur Dummy-Tests?
+
+**⚠️ MAJOR - Component Organization:**
+- Reusable components (search, buttons, modals) MUST be in /shared/
+- Feature-specific components → /features/[feature-name]/
+- Check: Könnte diese Component woanders wiederverwendet werden?
+
+**⚠️ MAJOR - File Organization:**
+- ONE class per file (NO multiple classes!)
+- ONE interface per file (NO multiple interfaces!)
+- Each file serves ONE purpose only
+- Check: Enthält die Datei mehrere Klassen/Interfaces?
+
+**⚠️ MAJOR - State Management:**
+- MUST use NgRx for shared state (@ngrx/store, @ngrx/effects, @ngrx/entity)
+- MUST use RxJS for reactive programming
+- NO component-level state for shared data
+- Check: Wird State Management korrekt verwendet?
 
 === REVIEW-RICHTLINIEN ===
 

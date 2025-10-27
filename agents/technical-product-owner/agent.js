@@ -36,8 +36,18 @@ class TechnicalProductOwnerAgent {
     this.agentDocumentation = null;
     this.realFiles = [];
     
+    // Angular Best Practices & Architecture Rules
+    this.angularRules = {
+      componentStructure: 'Split into .ts, .html, .css - use templateUrl/styleUrl - Max 400 lines',
+      componentOrganization: 'Reusable → /shared/, Feature-specific → /features/',
+      fileOrganization: 'One class per file, one interface per file',
+      stateManagement: 'NgRx (@ngrx/store, effects, entity) + RxJS',
+      testing: 'Every file needs .spec.ts test file'
+    };
+    
     console.log(`${this.emoji} ${this.name} initialized`);
     console.log(`   Workflow: To Do → Analyze → Approved → Finalize`);
+    console.log(`   Angular Rules: Component split, NgRx, Testing mandatory`);
     
     this.sendEvent({
       type: 'agent_started',
@@ -789,9 +799,18 @@ ${Object.entries(answers || {}).map(([num, answer]) => `Frage ${num}: ${answer}`
 === RELEVANTE CODE FILES ===
 ${codeFiles.map(f => `- ${f.path}`).join('\n')}
 
+=== ANGULAR ARCHITECTURE RULES ===
+**WICHTIG: Diese Regeln MÜSSEN in die Beschreibung für Developer einfließen!**
+
+1. Component Structure: .ts, .html, .css getrennt - templateUrl/styleUrl - Max 400 Zeilen
+2. Component Organization: Reusable → /shared/, Feature-specific → /features/
+3. File Organization: ONE class per file, ONE interface per file
+4. State Management: NgRx (@ngrx/store, effects, entity) + RxJS
+5. Testing: EVERY file needs .spec.ts
+
 Erstelle eine strukturierte Beschreibung mit:
 1. Zusammenfassung
-2. Für Developer (immer)
+2. Für Developer (immer) - inkl. Angular Rules!
 3. Technische Details
 4. Akzeptanzkriterien
 

@@ -1,0 +1,34 @@
+<div class="card">
+  <div class="card-header">
+    <h2>Users ({{ users.length }})</h2>
+    <button class="btn btn-refresh" (click)="onRefresh()">
+      🔄 Refresh
+    </button>
+  </div>
+
+  <div class="loading" *ngIf="loading">Loading users...</div>
+
+  <div class="no-data" *ngIf="!loading && users.length === 0">
+    No users found. Create one above!
+  </div>
+
+  <table *ngIf="!loading && users.length > 0">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <app-user-table-row 
+        *ngFor="let user of users"
+        [user]="user"
+        (edit)="onEdit($event)"
+        (delete)="onDelete($event)">
+      </app-user-table-row>
+    </tbody>
+  </table>
+</div>

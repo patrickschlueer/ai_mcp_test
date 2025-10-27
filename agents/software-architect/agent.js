@@ -36,8 +36,18 @@ class SoftwareArchitectAgent {
     this.processedSubTasks = new Set();
     this.maxIterations = 1;  // Nur 1 Iteration = Initial + 1 Review
     
+    // Angular Best Practices & Architecture Rules
+    this.angularRules = {
+      componentStructure: 'Split into .ts, .html, .css - use templateUrl/styleUrl - Max 400 lines',
+      componentOrganization: 'Reusable → /shared/, Feature-specific → /features/',
+      fileOrganization: 'One class per file, one interface per file',
+      stateManagement: 'NgRx (@ngrx/store, effects, entity) + RxJS',
+      testing: 'Every file needs .spec.ts test file'
+    };
+    
     console.log(`${this.emoji} ${this.name} initialized`);
     console.log(`   Max iterations: ${this.maxIterations}`);
+    console.log(`   Angular Rules: Component split, NgRx, Testing mandatory`);
     
     this.sendEvent({
       type: 'agent_started',
@@ -205,24 +215,63 @@ ${parentTask.description || ''}
 
 ${codeSection}
 
+=== ANGULAR ARCHITECTURE RULES ===
+**WICHTIG: Diese Regeln MÜSSEN in das Architektur-Design einfließen!**
+
+1. **Component Structure:**
+   - JEDE Component: .ts, .html, .css (getrennte Files!)
+   - templateUrl + styleUrl (KEINE inline templates/styles!)
+   - Max 400 Zeilen - bei Überschreitung: Split in Sub-Components
+   - Prüfe: Sollte Component aufgeteilt werden?
+
+2. **Component Organization:**
+   - Wiederverwendbare Components (Search, Buttons, Modals) → /shared/
+   - Feature-spezifische Components → /features/[feature-name]/
+   - Frage: Kann Component woanders verwendet werden?
+
+3. **File Organization:**
+   - ONE class per file
+   - ONE interface per file
+   - KEINE Gruppierung mehrerer Classes/Interfaces
+
+4. **State Management (MANDATORY!):**
+   - NgRx für shared state (@ngrx/store, @ngrx/effects, @ngrx/entity)
+   - RxJS für reactive programming
+   - Store Structure: Actions, Reducers, Effects, Selectors
+   - KEINE component-level state für shared data
+
+5. **Testing (MANDATORY!):**
+   - JEDE Component braucht .spec.ts
+   - JEDER Service braucht .spec.ts
+   - Unit Tests + E2E Tests für kritische Flows
+
 === AUFGABE ===
 Erstelle ein HIGH-LEVEL Architektur-Design (KEINE Implementierung!):
 
-1. **Architektur-Pattern**: Welches Pattern passt? (MVC, Layered, Microservices, etc.)
-2. **Komponenten-Übersicht**: Welche Hauptkomponenten werden benötigt? (z.B. "UserService", "PasswordValidator")
-3. **Datenfluss**: Wie fließen Daten zwischen Komponenten? (Diagramm-Beschreibung)
-4. **API-Struktur**: Welche Endpoints? Request/Response-Konzept (KEINE konkreten Payloads!)
-5. **Datenmodell-Konzept**: Welche Entitäten? Beziehungen? (KEINE konkreten Schemas!)
-6. **Security-Konzept**: Authentifizierung? Autorisierung? Verschlüsselung? (Konzept, keine Implementierung!)
-7. **Technologie-Entscheidungen**: Welche Technologien/Libraries passen zum Projekt?
-8. **Skalierbarkeit & Performance**: Caching-Strategie? Load Balancing? Database-Indizes?
+1. **Architektur-Pattern**: Welches Pattern passt? (Berücksichtige NgRx Store Pattern!)
+2. **Komponenten-Struktur**: 
+   - Welche Components benötigt? (Beachte 400-Zeilen-Regel!)
+   - Welche Components sind reusable → /shared/?
+   - Welche sind feature-specific?
+3. **NgRx State Management**:
+   - Welche State Slices?
+   - Welche Actions/Effects werden benötigt?
+   - Welche Selectors?
+4. **Datenfluss**: Wie fließen Daten? (Component → Store → Effects → API)
+5. **API-Struktur**: Welche Endpoints? Request/Response-Konzept
+6. **Datenmodell-Konzept**: Welche Interfaces/Models? (Ein File pro Interface!)
+7. **Testing-Strategie**: Welche Tests sind nötig? (Unit + E2E)
+8. **Skalierbarkeit & Performance**: Caching? Lazy Loading?
 
 ⚠️ WICHTIG:
 - KEINE Code-Implementierungen!
 - KEINE konkreten Funktionen oder Services!
 - NUR High-Level Architektur-Entscheidungen!
+- ABER: Beachte die Angular Architecture Rules (Component Split, NgRx, Testing)!
 - Fokus auf WARUM und WIE (Konzept), nicht WAS (Code)!
 - Der Developer implementiert später basierend auf deinen Architektur-Vorgaben!
+- MANDATORY: NgRx Store Structure definieren!
+- MANDATORY: Component-Aufteilung planen (max 400 Zeilen)!
 
 Antworte direkt mit Markdown (KEIN JSON-Wrapper!).
 Halte dich kurz und prägnant - max. 2-3 Seiten!`;

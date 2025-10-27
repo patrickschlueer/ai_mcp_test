@@ -1,0 +1,45 @@
+<div class="card form-card">
+  <h2>{{ editMode ? 'Edit User' : 'Add New User' }}</h2>
+  <form (ngSubmit)="onSubmit()">
+    <div class="form-group">
+      <label for="name">Name *</label>
+      <input 
+        id="name" 
+        type="text" 
+        [(ngModel)]="user.name" 
+        name="name"
+        placeholder="Enter name" 
+        required>
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email *</label>
+      <input 
+        id="email" 
+        type="email" 
+        [(ngModel)]="user.email" 
+        name="email"
+        placeholder="Enter email" 
+        required>
+    </div>
+
+    <div class="form-group">
+      <label for="role">Role</label>
+      <select id="role" [(ngModel)]="user.role" name="role">
+        <option value="User">User</option>
+        <option value="Admin">Admin</option>
+        <option value="Manager">Manager</option>
+      </select>
+    </div>
+
+    <div class="button-group">
+      <button type="submit" class="btn btn-primary">
+        {{ editMode ? '💾 Update User' : '➕ Create User' }}
+      </button>
+      <button type="button" class="btn btn-secondary" 
+              (click)="onCancel()" *ngIf="editMode">
+        ❌ Cancel
+      </button>
+    </div>
+  </form>
+</div>
