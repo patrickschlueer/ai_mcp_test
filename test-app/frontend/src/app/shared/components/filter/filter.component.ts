@@ -1,105 +1,111 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
-import { FormBuilder, FormGroup, FormArray } from '@angular/forms';
-import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { FormBuilder, FormGroup, FormArray, FormControl } from '@angular/forms';
+import { Subject, BehaviorSubject, combineLatest } from 'rxjs';
+import { takeUntil, debounceTime, distinctUntilChanged, map, startWith } from 'rxjs/operators';
+import { DomSanitizer } from '@angular/platform-browser';
 
-export interface FilterCriterion {
+export interface FilterCriteria {
   field: string;
   operator: 'equals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan' | 'between';
-  value: string | number | Date | [string | number | Date, string | number | Date];
-  logicalOperator?: 'AND' | 'OR';
+  value: any;
+  type: 'text' | 'number' | 'date' | 'boolean' | 'select';
 }
 
 export interface FilterPreset {
   id: string;
   name: string;
-  criteria: FilterCriterion[];
+  criteria: FilterCriteria[];
   isDefault?: boolean;
 }
 
-export interface FilterConfig {
-  fields: FilterField[];
-  presets?: FilterPreset[];
-  enableQuickFilters?: boolean;
-  maxCriteria?: number;
-}
-
-export interface FilterField {
-  key: string;
+export interface QuickFilter {
+  id: string;
   label: string;
-  type: 'text' | 'number' | 'date' | 'select' | 'boolean';
-  options?: { value: any; label: string }[];
-  validation?: {
-    required?: boolean;
-    min?: number;
-    max?: number;
-    pattern?: string;
-  };
-}
-
-export interface FilterState {
-  criteria: FilterCriterion[];
-  activePreset?: string;
-  isExpanded: boolean;
-  quickFilters: { [key: string]: boolean };
+  criteria: FilterCriteria;
+  count?: number;
 }
 
 @Component({
   selector: 'app-filter',
   templateUrl: './filter.component.html',
-  styleUrl: './filter.component.css'
+  styleUrl: './filter.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FilterComponent implements OnInit, OnDestroy {
-  @Input() config!: FilterConfig;
-  @Input() initialState?: Partial<FilterState>;
-  @Input() disabled = false;
+  @Input() fields: { key: string; label: string; type: string; options?: any[] }[] = [];
+  @Input() data: any[] = [];
+  @Input() presets: FilterPreset[] = [];
+  @Input() quickFilters: QuickFilter[] = [];
+  @Input() maxRecordsClientSide = 5000;
+  @Input() showAdvanced = true;
   @Input() showPresets = true;
   @Input() showQuickFilters = true;
-  @Input() compact = false;
+  @Input() debounceTime = 300;
+  
+  @Output() filterChange = new EventEmitter<any[]>();
+  @Output() criteriaChange = new EventEmitter<FilterCriteria[]>();
+  @Output() presetSave = new EventEmitter<FilterPreset>();
+  @Output() presetDelete = new EventEmitter<string>();
+  @Output() serverSideFilter = new EventEmitter<FilterCriteria[]>();
 
-  @Output() filterChange = new EventEmitter<FilterCriterion[]>();
-  @Output() presetSelected = new EventEmitter<FilterPreset>();
-  @Output() filterReset = new EventEmitter<void>();
-  @Output() stateChange = new EventEmitter<FilterState>();
-
-  filterForm!: FormGroup;
-  state: FilterState = {
-    criteria: [],
-    isExpanded: false,
-    quickFilters: {}
-  };
-
-  operators = [
-    { value: 'equals', label: 'Equals' },
-    { value: 'contains', label: 'Contains' },
-    { value: 'startsWith', label: 'Starts with' },
-    { value: 'endsWith', label: 'Ends with' },
-    { value: 'greaterThan', label: 'Greater than' },
-    { value: 'lessThan', label: 'Less than' },
-    { value: 'between', label: 'Between' }
-  ];
-
-  logicalOperators = [
-    { value: 'AND', label: 'AND' },
-    { value: 'OR', label: 'OR' }
-  ];
+  filterForm: FormGroup;
+  filteredData$ = new BehaviorSubject<any[]>([]);
+  isAdvancedOpen = false;
+  isPresetPanelOpen = false;
+  isMobile = false;
+  activeQuickFilters: string[] = [];
+  filterHistory: FilterCriteria[][] = [];
+  currentHistoryIndex = -1;
+  isLoading = false;
+  errorMessage = '';
 
   private destroy$ = new Subject<void>();
-  private filterChangeSubject = new Subject<FilterCriterion[]>();
+  private searchSubject$ = new BehaviorSubject<string>('');
+  private criteriaSubject$ = new BehaviorSubject<FilterCriteria[]>([]);
+
+  readonly operators = {
+    text: [
+      { value: 'contains', label: 'Contains' },
+      { value: 'equals', label: 'Equals' },
+      { value: 'startsWith', label: 'Starts with' },
+      { value: 'endsWith', label: 'Ends with' }
+    ],
+    number: [
+      { value: 'equals', label: 'Equals' },
+      { value: 'greaterThan', label: 'Greater than' },
+      { value: 'lessThan', label: 'Less than' },
+      { value: 'between', label: 'Between' }
+    ],
+    date: [
+      { value: 'equals', label: 'On' },
+      { value: 'greaterThan', label: 'After' },
+      { value: 'lessThan', label: 'Before' },
+      { value: 'between', label: 'Between' }
+    ],
+    boolean: [
+      { value: 'equals', label: 'Is' }
+    ],
+    select: [
+      { value: 'equals', label: 'Equals' }
+    ]
+  };
 
   constructor(
     private fb: FormBuilder,
     private sanitizer: DomSanitizer
   ) {
-    this.initializeForm();
-    this.setupFilterChangeStream();
+    this.filterForm = this.fb.group({
+      searchTerm: [''],
+      criteria: this.fb.array([])
+    });
+    
+    this.checkMobileView();
   }
 
   ngOnInit(): void {
-    this.initializeState();
-    this.setupFormSubscriptions();
-    this.initializeQuickFilters();
+    this.initializeFilter();
+    this.setupReactiveFiltering();
+    this.setupWindowResize();
   }
 
   ngOnDestroy(): void {
@@ -107,244 +113,416 @@ export class FilterComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  private initializeForm(): void {
-    this.filterForm = this.fb.group({
-      criteria: this.fb.array([])
+  private initializeFilter(): void {
+    // Initialize with data
+    this.filteredData$.next([...this.data]);
+    
+    // Setup search term reactive filtering
+    this.filterForm.get('searchTerm')?.valueChanges.pipe(
+      debounceTime(this.debounceTime),
+      distinctUntilChanged(),
+      takeUntil(this.destroy$)
+    ).subscribe(term => {
+      this.searchSubject$.next(this.sanitizeInput(term || ''));
+    });
+
+    // Initialize quick filter counts
+    this.updateQuickFilterCounts();
+  }
+
+  private setupReactiveFiltering(): void {
+    // Combine search and criteria for filtering
+    combineLatest([
+      this.searchSubject$.pipe(startWith('')),
+      this.criteriaSubject$.pipe(startWith([])),
+      this.filteredData$.pipe(startWith([]))
+    ]).pipe(
+      debounceTime(this.debounceTime),
+      map(([searchTerm, criteria]) => ({ searchTerm, criteria })),
+      takeUntil(this.destroy$)
+    ).subscribe(({ searchTerm, criteria }) => {
+      this.applyFilters(searchTerm, criteria);
     });
   }
 
-  private initializeState(): void {
-    if (this.initialState) {
-      this.state = { ...this.state, ...this.initialState };
-    }
-
-    // Initialize criteria from state
-    if (this.state.criteria.length > 0) {
-      this.state.criteria.forEach(criterion => {
-        this.addCriterion(criterion);
-      });
-    } else {
-      this.addCriterion();
+  private setupWindowResize(): void {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', () => this.checkMobileView());
     }
   }
 
-  private setupFormSubscriptions(): void {
-    this.criteriaArray.valueChanges
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        takeUntil(this.destroy$)
-      )
-      .subscribe(criteria => {
-        this.onCriteriaChange(criteria);
-      });
-  }
-
-  private setupFilterChangeStream(): void {
-    this.filterChangeSubject
-      .pipe(
-        debounceTime(150),
-        distinctUntilChanged(),
-        takeUntil(this.destroy$)
-      )
-      .subscribe(criteria => {
-        this.filterChange.emit(criteria);
-      });
-  }
-
-  private initializeQuickFilters(): void {
-    if (this.config.presets) {
-      this.config.presets.forEach(preset => {
-        if (preset.isDefault) {
-          this.state.quickFilters[preset.id] = false;
-        }
-      });
+  private checkMobileView(): void {
+    if (typeof window !== 'undefined') {
+      this.isMobile = window.innerWidth < 768;
     }
+  }
+
+  private sanitizeInput(input: string): string {
+    if (!input) return '';
+    return input.replace(/<[^>]*>/g, '').trim();
   }
 
   get criteriaArray(): FormArray {
     return this.filterForm.get('criteria') as FormArray;
   }
 
-  addCriterion(criterion?: FilterCriterion): void {
-    const maxCriteria = this.config.maxCriteria || 10;
-    if (this.criteriaArray.length >= maxCriteria) {
-      return;
-    }
+  addCriteria(criteria?: FilterCriteria): void {
+    const field = this.fields[0];
+    const newCriteria = this.fb.group({
+      field: [criteria?.field || field?.key || ''],
+      operator: [criteria?.operator || 'contains'],
+      value: [criteria?.value || ''],
+      type: [criteria?.type || field?.type || 'text']
+    });
 
-    const criterionGroup = this.createCriterionGroup(criterion);
-    this.criteriaArray.push(criterionGroup);
-  }
-
-  private createCriterionGroup(criterion?: FilterCriterion): FormGroup {
-    const defaultField = this.config.fields[0]?.key || '';
+    this.criteriaArray.push(newCriteria);
     
-    return this.fb.group({
-      field: [criterion?.field || defaultField],
-      operator: [criterion?.operator || 'equals'],
-      value: [criterion?.value || ''],
-      logicalOperator: [criterion?.logicalOperator || 'AND']
+    // Subscribe to changes
+    newCriteria.valueChanges.pipe(
+      debounceTime(this.debounceTime),
+      takeUntil(this.destroy$)
+    ).subscribe(() => {
+      this.updateCriteriaFromForm();
     });
   }
 
-  removeCriterion(index: number): void {
-    if (this.criteriaArray.length > 1) {
+  removeCriteria(index: number): void {
+    if (this.criteriaArray.length > 0) {
       this.criteriaArray.removeAt(index);
+      this.updateCriteriaFromForm();
     }
   }
 
-  private onCriteriaChange(criteria: FilterCriterion[]): void {
-    // Sanitize input values to prevent XSS
-    const sanitizedCriteria = criteria.map(criterion => ({
-      ...criterion,
-      value: this.sanitizeValue(criterion.value)
-    }));
-
-    this.state.criteria = sanitizedCriteria;
-    this.emitStateChange();
-    this.filterChangeSubject.next(sanitizedCriteria);
-  }
-
-  private sanitizeValue(value: any): any {
-    if (typeof value === 'string') {
-      // Basic XSS protection
-      return value.replace(/<script[^>]*>.*?<\/script>/gi, '')
-                 .replace(/<[^>]*>/g, '')
-                 .trim();
-    }
-    return value;
-  }
-
-  toggleExpanded(): void {
-    this.state.isExpanded = !this.state.isExpanded;
-    this.emitStateChange();
-  }
-
-  selectPreset(preset: FilterPreset): void {
-    this.state.activePreset = preset.id;
+  private updateCriteriaFromForm(): void {
+    const criteria = this.criteriaArray.value.filter((c: FilterCriteria) => 
+      c.field && c.operator && (c.value !== null && c.value !== '')
+    );
     
+    this.addToHistory(criteria);
+    this.criteriaSubject$.next(criteria);
+    this.criteriaChange.emit(criteria);
+  }
+
+  private applyFilters(searchTerm: string, criteria: FilterCriteria[]): void {
+    try {
+      this.isLoading = true;
+      this.errorMessage = '';
+
+      // Check if we should use server-side filtering
+      if (this.data.length > this.maxRecordsClientSide) {
+        this.serverSideFilter.emit(criteria);
+        return;
+      }
+
+      let filtered = [...this.data];
+
+      // Apply search term filter
+      if (searchTerm) {
+        filtered = this.applySearchFilter(filtered, searchTerm);
+      }
+
+      // Apply criteria filters
+      if (criteria.length > 0) {
+        filtered = this.applyCriteriaFilters(filtered, criteria);
+      }
+
+      // Apply quick filters
+      if (this.activeQuickFilters.length > 0) {
+        filtered = this.applyQuickFilters(filtered);
+      }
+
+      this.filteredData$.next(filtered);
+      this.filterChange.emit(filtered);
+      this.updateQuickFilterCounts();
+      
+    } catch (error) {
+      this.errorMessage = 'Error applying filters. Please try again.';
+      console.error('Filter error:', error);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private applySearchFilter(data: any[], searchTerm: string): any[] {
+    const term = searchTerm.toLowerCase();
+    return data.filter(item => {
+      return this.fields.some(field => {
+        const value = item[field.key];
+        if (value === null || value === undefined) return false;
+        return value.toString().toLowerCase().includes(term);
+      });
+    });
+  }
+
+  private applyCriteriaFilters(data: any[], criteria: FilterCriteria[]): any[] {
+    return data.filter(item => {
+      return criteria.every(criterion => {
+        return this.matchesCriterion(item, criterion);
+      });
+    });
+  }
+
+  private applyQuickFilters(data: any[]): any[] {
+    return data.filter(item => {
+      return this.activeQuickFilters.every(filterId => {
+        const quickFilter = this.quickFilters.find(qf => qf.id === filterId);
+        return quickFilter ? this.matchesCriterion(item, quickFilter.criteria) : true;
+      });
+    });
+  }
+
+  private matchesCriterion(item: any, criterion: FilterCriteria): boolean {
+    const fieldValue = item[criterion.field];
+    const filterValue = criterion.value;
+
+    if (fieldValue === null || fieldValue === undefined) {
+      return false;
+    }
+
+    switch (criterion.operator) {
+      case 'equals':
+        return fieldValue === filterValue;
+      case 'contains':
+        return fieldValue.toString().toLowerCase().includes(filterValue.toString().toLowerCase());
+      case 'startsWith':
+        return fieldValue.toString().toLowerCase().startsWith(filterValue.toString().toLowerCase());
+      case 'endsWith':
+        return fieldValue.toString().toLowerCase().endsWith(filterValue.toString().toLowerCase());
+      case 'greaterThan':
+        return Number(fieldValue) > Number(filterValue);
+      case 'lessThan':
+        return Number(fieldValue) < Number(filterValue);
+      case 'between':
+        if (Array.isArray(filterValue) && filterValue.length === 2) {
+          const [min, max] = filterValue;
+          return Number(fieldValue) >= Number(min) && Number(fieldValue) <= Number(max);
+        }
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  toggleQuickFilter(filterId: string): void {
+    const index = this.activeQuickFilters.indexOf(filterId);
+    if (index === -1) {
+      this.activeQuickFilters.push(filterId);
+    } else {
+      this.activeQuickFilters.splice(index, 1);
+    }
+    
+    this.updateCriteriaFromForm();
+  }
+
+  isQuickFilterActive(filterId: string): boolean {
+    return this.activeQuickFilters.includes(filterId);
+  }
+
+  private updateQuickFilterCounts(): void {
+    this.quickFilters.forEach(qf => {
+      qf.count = this.data.filter(item => 
+        this.matchesCriterion(item, qf.criteria)
+      ).length;
+    });
+  }
+
+  toggleAdvanced(): void {
+    this.isAdvancedOpen = !this.isAdvancedOpen;
+  }
+
+  togglePresetPanel(): void {
+    this.isPresetPanelOpen = !this.isPresetPanelOpen;
+  }
+
+  applyPreset(preset: FilterPreset): void {
     // Clear existing criteria
-    while (this.criteriaArray.length > 0) {
+    while (this.criteriaArray.length !== 0) {
       this.criteriaArray.removeAt(0);
     }
 
     // Add preset criteria
-    preset.criteria.forEach(criterion => {
-      this.addCriterion(criterion);
+    preset.criteria.forEach(criteria => {
+      this.addCriteria(criteria);
     });
 
-    this.presetSelected.emit(preset);
-    this.emitStateChange();
+    this.isPresetPanelOpen = false;
   }
 
-  toggleQuickFilter(filterId: string): void {
-    this.state.quickFilters[filterId] = !this.state.quickFilters[filterId];
-    
-    const preset = this.config.presets?.find(p => p.id === filterId);
-    if (preset && this.state.quickFilters[filterId]) {
-      this.selectPreset(preset);
+  saveAsPreset(): void {
+    const criteria = this.criteriaArray.value;
+    if (criteria.length === 0) {
+      this.errorMessage = 'No criteria to save as preset';
+      return;
     }
 
-    this.emitStateChange();
+    const presetName = prompt('Enter preset name:');
+    if (!presetName) return;
+
+    const preset: FilterPreset = {
+      id: Date.now().toString(),
+      name: this.sanitizeInput(presetName),
+      criteria: criteria
+    };
+
+    this.presetSave.emit(preset);
   }
 
-  resetFilters(): void {
-    // Clear form
-    while (this.criteriaArray.length > 0) {
+  deletePreset(presetId: string): void {
+    if (confirm('Are you sure you want to delete this preset?')) {
+      this.presetDelete.emit(presetId);
+    }
+  }
+
+  clearAll(): void {
+    // Clear search
+    this.filterForm.get('searchTerm')?.setValue('');
+    
+    // Clear criteria
+    while (this.criteriaArray.length !== 0) {
       this.criteriaArray.removeAt(0);
     }
     
-    // Add one empty criterion
-    this.addCriterion();
+    // Clear quick filters
+    this.activeQuickFilters = [];
     
-    // Reset state
-    this.state = {
-      criteria: [],
-      isExpanded: false,
-      quickFilters: {}
-    };
-
-    this.filterReset.emit();
-    this.emitStateChange();
+    // Reset filtered data
+    this.filteredData$.next([...this.data]);
+    this.filterChange.emit([...this.data]);
   }
 
-  getFieldOptions(fieldKey: string): { value: any; label: string }[] {
-    const field = this.config.fields.find(f => f.key === fieldKey);
-    return field?.options || [];
+  private addToHistory(criteria: FilterCriteria[]): void {
+    // Remove any history after current index
+    this.filterHistory = this.filterHistory.slice(0, this.currentHistoryIndex + 1);
+    
+    // Add new state
+    this.filterHistory.push([...criteria]);
+    this.currentHistoryIndex++;
+    
+    // Limit history size
+    if (this.filterHistory.length > 50) {
+      this.filterHistory.shift();
+      this.currentHistoryIndex--;
+    }
+  }
+
+  canUndo(): boolean {
+    return this.currentHistoryIndex > 0;
+  }
+
+  canRedo(): boolean {
+    return this.currentHistoryIndex < this.filterHistory.length - 1;
+  }
+
+  undo(): void {
+    if (this.canUndo()) {
+      this.currentHistoryIndex--;
+      this.restoreFromHistory();
+    }
+  }
+
+  redo(): void {
+    if (this.canRedo()) {
+      this.currentHistoryIndex++;
+      this.restoreFromHistory();
+    }
+  }
+
+  private restoreFromHistory(): void {
+    const criteria = this.filterHistory[this.currentHistoryIndex] || [];
+    
+    // Clear existing criteria
+    while (this.criteriaArray.length !== 0) {
+      this.criteriaArray.removeAt(0);
+    }
+
+    // Restore criteria
+    criteria.forEach(c => this.addCriteria(c));
+  }
+
+  getOperatorsForField(fieldKey: string): { value: string; label: string }[] {
+    const field = this.fields.find(f => f.key === fieldKey);
+    if (!field) return this.operators.text;
+    
+    return this.operators[field.type as keyof typeof this.operators] || this.operators.text;
   }
 
   getFieldType(fieldKey: string): string {
-    const field = this.config.fields.find(f => f.key === fieldKey);
+    const field = this.fields.find(f => f.key === fieldKey);
     return field?.type || 'text';
   }
 
-  getAvailableOperators(fieldKey: string): { value: string; label: string }[] {
+  getFieldOptions(fieldKey: string): any[] {
+    const field = this.fields.find(f => f.key === fieldKey);
+    return field?.options || [];
+  }
+
+  onFieldChange(index: number): void {
+    const criteriaGroup = this.criteriaArray.at(index);
+    const fieldKey = criteriaGroup.get('field')?.value;
     const fieldType = this.getFieldType(fieldKey);
+    const operators = this.getOperatorsForField(fieldKey);
     
-    switch (fieldType) {
-      case 'number':
-      case 'date':
-        return this.operators;
-      case 'boolean':
-        return this.operators.filter(op => op.value === 'equals');
-      case 'select':
-        return this.operators.filter(op => ['equals', 'contains'].includes(op.value));
-      default:
-        return this.operators.filter(op => op.value !== 'between');
-    }
+    // Update type and reset operator/value
+    criteriaGroup.patchValue({
+      type: fieldType,
+      operator: operators[0]?.value || 'contains',
+      value: ''
+    });
   }
 
-  private emitStateChange(): void {
-    this.stateChange.emit({ ...this.state });
+  exportFilters(): void {
+    const filterData = {
+      criteria: this.criteriaArray.value,
+      searchTerm: this.filterForm.get('searchTerm')?.value,
+      quickFilters: this.activeQuickFilters,
+      timestamp: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(filterData, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `filters-${Date.now()}.json`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   }
 
-  // Accessibility helpers
-  getAriaLabel(index: number): string {
-    return `Filter criterion ${index + 1}`;
-  }
+  importFilters(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    
+    if (!file) return;
 
-  getRemoveButtonAriaLabel(index: number): string {
-    return `Remove filter criterion ${index + 1}`;
-  }
-
-  // Validation helpers
-  isCriterionValid(index: number): boolean {
-    const criterion = this.criteriaArray.at(index);
-    if (!criterion) return false;
-
-    const field = criterion.get('field')?.value;
-    const operator = criterion.get('operator')?.value;
-    const value = criterion.get('value')?.value;
-
-    return !!(field && operator && (value !== '' && value !== null && value !== undefined));
-  }
-
-  hasValidCriteria(): boolean {
-    const criteriaCount = this.criteriaArray.length;
-    if (criteriaCount === 0) return false;
-
-    let validCount = 0;
-    for (let i = 0; i < criteriaCount; i++) {
-      if (this.isCriterionValid(i)) {
-        validCount++;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const filterData = JSON.parse(e.target?.result as string);
+        
+        // Import search term
+        if (filterData.searchTerm) {
+          this.filterForm.get('searchTerm')?.setValue(filterData.searchTerm);
+        }
+        
+        // Import criteria
+        if (filterData.criteria && Array.isArray(filterData.criteria)) {
+          while (this.criteriaArray.length !== 0) {
+            this.criteriaArray.removeAt(0);
+          }
+          filterData.criteria.forEach((c: FilterCriteria) => this.addCriteria(c));
+        }
+        
+        // Import quick filters
+        if (filterData.quickFilters && Array.isArray(filterData.quickFilters)) {
+          this.activeQuickFilters = filterData.quickFilters;
+        }
+        
+      } catch (error) {
+        this.errorMessage = 'Invalid filter file format';
+        console.error('Import error:', error);
       }
-    }
-
-    return validCount > 0;
-  }
-
-  getActiveFiltersCount(): number {
-    return this.state.criteria.filter(c => 
-      c.value !== '' && c.value !== null && c.value !== undefined
-    ).length;
-  }
-
-  // Memory management
-  trackByCriterion(index: number, item: any): number {
-    return index;
-  }
-
-  trackByPreset(index: number, preset: FilterPreset): string {
-    return preset.id;
+    };
+    
+    reader.readAsText(file);
+    input.value = ''; // Reset input
   }
 }
