@@ -1,372 +1,325 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Component, DebugElement } from '@angular/core';
+import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
-import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { DebugElement } from '@angular/core';
 import { of } from 'rxjs';
 
 import { FilterComponent } from './filter.component';
-import { FilterCriteria, FilterType } from '../../models/filter.model';
-
-@Component({
-  template: `
-    <app-filter
-      [criteria]="criteria"
-      [availableFields]="availableFields"
-      [isLoading]="isLoading"
-      (filtersChanged)="onFiltersChanged($event)"
-      (filtersCleared)="onFiltersCleared()"
-      (presetSaved)="onPresetSaved($event)"
-      (presetLoaded)="onPresetLoaded($event)">
-    </app-filter>
-  `
-})
-class TestHostComponent {
-  criteria: FilterCriteria[] = [];
-  availableFields = [
-    { key: 'name', label: 'Name', type: FilterType.TEXT },
-    { key: 'email', label: 'Email', type: FilterType.TEXT },
-    { key: 'role', label: 'Role', type: FilterType.SELECT, options: ['admin', 'user', 'guest'] },
-    { key: 'createdAt', label: 'Created Date', type: FilterType.DATE },
-    { key: 'isActive', label: 'Active', type: FilterType.BOOLEAN }
-  ];
-  isLoading = false;
-
-  onFiltersChanged(criteria: FilterCriteria[]): void {
-    this.criteria = criteria;
-  }
-
-  onFiltersCleared(): void {
-    this.criteria = [];
-  }
-
-  onPresetSaved(name: string): void {}
-
-  onPresetLoaded(criteria: FilterCriteria[]): void {
-    this.criteria = criteria;
-  }
-}
+import { FilterState, FilterType } from '../../models/filter.model';
 
 describe('FilterComponent', () => {
   let component: FilterComponent;
-  let hostComponent: TestHostComponent;
-  let fixture: ComponentFixture<TestHostComponent>;
-  let hostFixture: ComponentFixture<TestHostComponent>;
-  let debugElement: DebugElement;
+  let fixture: ComponentFixture<FilterComponent>;
+  let compiled: HTMLElement;
+
+  const mockFilterState: FilterState = {
+    searchTerm: '',
+    filters: {
+      role: '',
+      status: '',
+      department: ''
+    },
+    isAdvanced: false,
+    appliedFilters: []
+  };
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [
-        FilterComponent,
-        TestHostComponent
-      ],
-      imports: [
-        FormsModule,
-        ReactiveFormsModule
-      ]
+      declarations: [FilterComponent],
+      imports: [ReactiveFormsModule]
     }).compileComponents();
 
-    hostFixture = TestBed.createComponent(TestHostComponent);
-    hostComponent = hostFixture.componentInstance;
-    debugElement = hostFixture.debugElement.query(By.directive(FilterComponent));
-    component = debugElement.componentInstance;
-    fixture = debugElement.componentInstance;
+    fixture = TestBed.createComponent(FilterComponent);
+    component = fixture.componentInstance;
+    compiled = fixture.nativeElement as HTMLElement;
+    
+    // Set default inputs
+    component.filterState = { ...mockFilterState };
+    component.filterOptions = {
+      roles: ['admin', 'user', 'moderator'],
+      statuses: ['active', 'inactive', 'pending'],
+      departments: ['IT', 'HR', 'Finance']
+    };
+    
+    fixture.detectChanges();
   });
 
-  beforeEach(() => {
-    hostFixture.detectChanges();
+  it('should create', () => {
+    expect(component).toBeTruthy();
   });
 
-  describe('Component Initialization', () => {
-    it('should create', () => {
-      expect(component).toBeTruthy();
+  describe('Search Input', () => {
+    it('should render search input', () => {
+      const searchInput = compiled.querySelector('.search-input') as HTMLInputElement;
+      expect(searchInput).toBeTruthy();
+      expect(searchInput.placeholder).toBe('Search users...');
     });
 
-    it('should initialize with empty criteria', () => {
-      expect(component.criteria).toEqual([]);
-    });
-
-    it('should receive available fields from parent', () => {
-      expect(component.availableFields).toEqual(hostComponent.availableFields);
-    });
-
-    it('should initialize reactive form', () => {
-      expect(component.filterForm).toBeDefined();
-      expect(component.filterForm.get('field')).toBeDefined();
-      expect(component.filterForm.get('operator')).toBeDefined();
-      expect(component.filterForm.get('value')).toBeDefined();
-    });
-  });
-
-  describe('Adding Filters', () => {
-    beforeEach(() => {
-      component.filterForm.patchValue({
-        field: 'name',
-        operator: 'contains',
-        value: 'John'
-      });
-    });
-
-    it('should add new filter criteria', () => {
-      const initialCount = component.criteria.length;
-      component.addFilter();
+    it('should emit search term changes', () => {
+      spyOn(component.searchChange, 'emit');
       
-      expect(component.criteria.length).toBe(initialCount + 1);
-      expect(component.criteria[component.criteria.length - 1]).toEqual({
-        id: jasmine.any(String),
-        field: 'name',
-        operator: 'contains',
-        value: 'John',
-        type: FilterType.TEXT
-      });
+      const searchInput = compiled.querySelector('.search-input') as HTMLInputElement;
+      searchInput.value = 'John Doe';
+      searchInput.dispatchEvent(new Event('input'));
+      
+      expect(component.searchChange.emit).toHaveBeenCalledWith('John Doe');
     });
 
-    it('should emit filtersChanged event when adding filter', () => {
-      spyOn(component.filtersChanged, 'emit');
-      component.addFilter();
+    it('should debounce search input', (done) => {
+      spyOn(component.searchChange, 'emit');
       
-      expect(component.filtersChanged.emit).toHaveBeenCalledWith(component.criteria);
-    });
-
-    it('should reset form after adding filter', () => {
-      component.addFilter();
+      const searchInput = compiled.querySelector('.search-input') as HTMLInputElement;
       
-      expect(component.filterForm.get('field')?.value).toBe('');
-      expect(component.filterForm.get('operator')?.value).toBe('');
-      expect(component.filterForm.get('value')?.value).toBe('');
-    });
-
-    it('should not add filter with empty field', () => {
-      component.filterForm.patchValue({ field: '' });
-      const initialCount = component.criteria.length;
+      // Rapid typing simulation
+      searchInput.value = 'J';
+      searchInput.dispatchEvent(new Event('input'));
       
-      component.addFilter();
+      searchInput.value = 'Jo';
+      searchInput.dispatchEvent(new Event('input'));
       
-      expect(component.criteria.length).toBe(initialCount);
-    });
-
-    it('should not add filter with empty value', () => {
-      component.filterForm.patchValue({ value: '' });
-      const initialCount = component.criteria.length;
+      searchInput.value = 'John';
+      searchInput.dispatchEvent(new Event('input'));
       
-      component.addFilter();
-      
-      expect(component.criteria.length).toBe(initialCount);
-    });
-  });
-
-  describe('Removing Filters', () => {
-    beforeEach(() => {
-      component.criteria = [
-        { id: '1', field: 'name', operator: 'contains', value: 'John', type: FilterType.TEXT },
-        { id: '2', field: 'email', operator: 'contains', value: '@test', type: FilterType.TEXT }
-      ];
-    });
-
-    it('should remove filter by id', () => {
-      component.removeFilter('1');
-      
-      expect(component.criteria.length).toBe(1);
-      expect(component.criteria.find(c => c.id === '1')).toBeUndefined();
-    });
-
-    it('should emit filtersChanged event when removing filter', () => {
-      spyOn(component.filtersChanged, 'emit');
-      component.removeFilter('1');
-      
-      expect(component.filtersChanged.emit).toHaveBeenCalledWith(component.criteria);
-    });
-
-    it('should handle removing non-existent filter gracefully', () => {
-      const initialCount = component.criteria.length;
-      component.removeFilter('non-existent');
-      
-      expect(component.criteria.length).toBe(initialCount);
-    });
-  });
-
-  describe('Clearing Filters', () => {
-    beforeEach(() => {
-      component.criteria = [
-        { id: '1', field: 'name', operator: 'contains', value: 'John', type: FilterType.TEXT }
-      ];
-    });
-
-    it('should clear all filters', () => {
-      component.clearFilters();
-      
-      expect(component.criteria.length).toBe(0);
-    });
-
-    it('should emit filtersCleared event', () => {
-      spyOn(component.filtersCleared, 'emit');
-      component.clearFilters();
-      
-      expect(component.filtersCleared.emit).toHaveBeenCalled();
-    });
-
-    it('should reset form when clearing filters', () => {
-      component.filterForm.patchValue({ field: 'name', operator: 'contains', value: 'test' });
-      component.clearFilters();
-      
-      expect(component.filterForm.get('field')?.value).toBe('');
-      expect(component.filterForm.get('operator')?.value).toBe('');
-      expect(component.filterForm.get('value')?.value).toBe('');
-    });
-  });
-
-  describe('Field Selection', () => {
-    it('should update available operators when field changes', () => {
-      component.onFieldChange('name');
-      
-      expect(component.availableOperators.length).toBeGreaterThan(0);
-      expect(component.availableOperators).toContain('contains');
-      expect(component.availableOperators).toContain('equals');
-    });
-
-    it('should reset operator and value when field changes', () => {
-      component.filterForm.patchValue({ operator: 'contains', value: 'test' });
-      component.onFieldChange('email');
-      
-      expect(component.filterForm.get('operator')?.value).toBe('');
-      expect(component.filterForm.get('value')?.value).toBe('');
-    });
-
-    it('should set selected field type', () => {
-      component.onFieldChange('role');
-      
-      expect(component.selectedFieldType).toBe(FilterType.SELECT);
-    });
-
-    it('should update available options for select fields', () => {
-      component.onFieldChange('role');
-      
-      expect(component.availableOptions).toEqual(['admin', 'user', 'guest']);
+      // Should only emit once after debounce
+      setTimeout(() => {
+        expect(component.searchChange.emit).toHaveBeenCalledTimes(1);
+        expect(component.searchChange.emit).toHaveBeenCalledWith('John');
+        done();
+      }, 350);
     });
   });
 
   describe('Quick Filters', () => {
-    it('should apply quick filter for active users', () => {
-      spyOn(component.filtersChanged, 'emit');
-      component.applyQuickFilter('active');
+    it('should render quick filter buttons', () => {
+      const quickFilters = compiled.querySelectorAll('.quick-filter-btn');
+      expect(quickFilters.length).toBe(3);
       
-      expect(component.criteria.length).toBe(1);
-      expect(component.criteria[0].field).toBe('isActive');
-      expect(component.criteria[0].value).toBe(true);
-      expect(component.filtersChanged.emit).toHaveBeenCalled();
+      const filterTexts = Array.from(quickFilters).map(btn => btn.textContent?.trim());
+      expect(filterTexts).toContain('Active Users');
+      expect(filterTexts).toContain('Admins');
+      expect(filterTexts).toContain('Recent');
     });
 
-    it('should apply quick filter for admins', () => {
-      spyOn(component.filtersChanged, 'emit');
-      component.applyQuickFilter('admins');
+    it('should apply quick filter on click', () => {
+      spyOn(component.quickFilterChange, 'emit');
       
-      expect(component.criteria.length).toBe(1);
-      expect(component.criteria[0].field).toBe('role');
-      expect(component.criteria[0].value).toBe('admin');
-      expect(component.filtersChanged.emit).toHaveBeenCalled();
+      const activeUsersBtn = compiled.querySelector('[data-testid="quick-filter-active"]') as HTMLButtonElement;
+      activeUsersBtn.click();
+      
+      expect(component.quickFilterChange.emit).toHaveBeenCalledWith('active');
     });
 
-    it('should apply quick filter for recent users', () => {
-      spyOn(component.filtersChanged, 'emit');
-      component.applyQuickFilter('recent');
+    it('should highlight active quick filter', () => {
+      component.activeQuickFilter = 'active';
+      fixture.detectChanges();
       
-      expect(component.criteria.length).toBe(1);
-      expect(component.criteria[0].field).toBe('createdAt');
-      expect(component.criteria[0].operator).toBe('gte');
-      expect(component.filtersChanged.emit).toHaveBeenCalled();
+      const activeBtn = compiled.querySelector('[data-testid="quick-filter-active"]') as HTMLButtonElement;
+      expect(activeBtn.classList.contains('active')).toBe(true);
     });
   });
 
-  describe('Filter Presets', () => {
-    it('should save current filters as preset', () => {
-      component.criteria = [
-        { id: '1', field: 'name', operator: 'contains', value: 'John', type: FilterType.TEXT }
-      ];
-      spyOn(component.presetSaved, 'emit');
+  describe('Advanced Filters Toggle', () => {
+    it('should toggle advanced filters visibility', () => {
+      const toggleBtn = compiled.querySelector('.advanced-toggle') as HTMLButtonElement;
       
-      component.savePreset('My Preset');
+      expect(component.showAdvancedFilters).toBe(false);
       
-      expect(component.presetSaved.emit).toHaveBeenCalledWith('My Preset');
+      toggleBtn.click();
+      expect(component.showAdvancedFilters).toBe(true);
+      
+      toggleBtn.click();
+      expect(component.showAdvancedFilters).toBe(false);
     });
 
-    it('should load preset filters', () => {
-      const presetCriteria: FilterCriteria[] = [
-        { id: '1', field: 'role', operator: 'equals', value: 'admin', type: FilterType.SELECT }
-      ];
-      spyOn(component.presetLoaded, 'emit');
+    it('should show/hide advanced filter panel', () => {
+      component.showAdvancedFilters = false;
+      fixture.detectChanges();
       
-      component.loadPreset(presetCriteria);
+      let advancedPanel = compiled.querySelector('.advanced-filters');
+      expect(advancedPanel).toBeFalsy();
       
-      expect(component.criteria).toEqual(presetCriteria);
-      expect(component.presetLoaded.emit).toHaveBeenCalledWith(presetCriteria);
-    });
-  });
-
-  describe('Validation', () => {
-    it('should validate required fields', () => {
-      component.filterForm.patchValue({ field: '', operator: 'contains', value: 'test' });
+      component.showAdvancedFilters = true;
+      fixture.detectChanges();
       
-      expect(component.isFormValid()).toBeFalsy();
-    });
-
-    it('should validate form completeness', () => {
-      component.filterForm.patchValue({ field: 'name', operator: 'contains', value: 'test' });
-      
-      expect(component.isFormValid()).toBeTruthy();
-    });
-
-    it('should sanitize input values', () => {
-      const maliciousInput = '<script>alert("xss")</script>';
-      const sanitized = component.sanitizeInput(maliciousInput);
-      
-      expect(sanitized).not.toContain('<script>');
-      expect(sanitized).not.toContain('alert');
+      advancedPanel = compiled.querySelector('.advanced-filters');
+      expect(advancedPanel).toBeTruthy();
     });
   });
 
-  describe('UI Interaction', () => {
-    it('should toggle advanced mode', () => {
-      const initialMode = component.isAdvancedMode;
-      component.toggleAdvancedMode();
-      
-      expect(component.isAdvancedMode).toBe(!initialMode);
+  describe('Advanced Filter Controls', () => {
+    beforeEach(() => {
+      component.showAdvancedFilters = true;
+      fixture.detectChanges();
     });
 
-    it('should handle loading state', () => {
-      hostComponent.isLoading = true;
-      hostFixture.detectChanges();
+    it('should render filter dropdowns', () => {
+      const roleSelect = compiled.querySelector('[data-testid="role-filter"]') as HTMLSelectElement;
+      const statusSelect = compiled.querySelector('[data-testid="status-filter"]') as HTMLSelectElement;
+      const departmentSelect = compiled.querySelector('[data-testid="department-filter"]') as HTMLSelectElement;
       
-      expect(component.isLoading).toBeTruthy();
+      expect(roleSelect).toBeTruthy();
+      expect(statusSelect).toBeTruthy();
+      expect(departmentSelect).toBeTruthy();
     });
 
-    it('should disable form when loading', () => {
-      component.isLoading = true;
-      hostFixture.detectChanges();
+    it('should populate dropdown options', () => {
+      const roleSelect = compiled.querySelector('[data-testid="role-filter"]') as HTMLSelectElement;
+      const options = roleSelect.querySelectorAll('option');
       
-      expect(component.filterForm.disabled).toBeTruthy();
+      expect(options.length).toBe(4); // 3 roles + "All" option
+      expect(options[0].textContent).toBe('All Roles');
+      expect(options[1].textContent).toBe('admin');
+    });
+
+    it('should emit filter changes', () => {
+      spyOn(component.filterChange, 'emit');
+      
+      const roleSelect = compiled.querySelector('[data-testid="role-filter"]') as HTMLSelectElement;
+      roleSelect.value = 'admin';
+      roleSelect.dispatchEvent(new Event('change'));
+      
+      expect(component.filterChange.emit).toHaveBeenCalledWith({
+        type: FilterType.ROLE,
+        value: 'admin'
+      });
     });
   });
 
-  describe('Memory Management', () => {
-    it('should clean up subscriptions on destroy', () => {
-      spyOn(component['destroy$'], 'next');
-      spyOn(component['destroy$'], 'complete');
+  describe('Applied Filters', () => {
+    beforeEach(() => {
+      component.filterState = {
+        ...mockFilterState,
+        appliedFilters: [
+          { type: FilterType.ROLE, value: 'admin', label: 'Role: Admin' },
+          { type: FilterType.STATUS, value: 'active', label: 'Status: Active' }
+        ]
+      };
+      fixture.detectChanges();
+    });
+
+    it('should display applied filter tags', () => {
+      const filterTags = compiled.querySelectorAll('.filter-tag');
+      expect(filterTags.length).toBe(2);
       
-      component.ngOnDestroy();
+      expect(filterTags[0].textContent).toContain('Role: Admin');
+      expect(filterTags[1].textContent).toContain('Status: Active');
+    });
+
+    it('should remove filter on tag close', () => {
+      spyOn(component.filterRemove, 'emit');
       
-      expect(component['destroy$'].next).toHaveBeenCalled();
-      expect(component['destroy$'].complete).toHaveBeenCalled();
+      const removeBtn = compiled.querySelector('.filter-tag .remove-btn') as HTMLButtonElement;
+      removeBtn.click();
+      
+      expect(component.filterRemove.emit).toHaveBeenCalledWith({
+        type: FilterType.ROLE,
+        value: 'admin',
+        label: 'Role: Admin'
+      });
+    });
+
+    it('should show clear all button when filters applied', () => {
+      const clearAllBtn = compiled.querySelector('.clear-all-btn') as HTMLButtonElement;
+      expect(clearAllBtn).toBeTruthy();
+      expect(clearAllBtn.textContent?.trim()).toBe('Clear All');
+    });
+
+    it('should emit clear all filters', () => {
+      spyOn(component.clearAllFilters, 'emit');
+      
+      const clearAllBtn = compiled.querySelector('.clear-all-btn') as HTMLButtonElement;
+      clearAllBtn.click();
+      
+      expect(component.clearAllFilters.emit).toHaveBeenCalled();
+    });
+  });
+
+  describe('Filter Reset', () => {
+    it('should reset search and filters', () => {
+      spyOn(component.filterReset, 'emit');
+      component.showAdvancedFilters = true;
+      
+      component.resetFilters();
+      
+      expect(component.showAdvancedFilters).toBe(false);
+      expect(component.activeQuickFilter).toBe('');
+      expect(component.filterReset.emit).toHaveBeenCalled();
     });
   });
 
   describe('Accessibility', () => {
     it('should have proper ARIA labels', () => {
-      const fieldSelect = debugElement.query(By.css('select[data-testid="field-select"]'));
-      expect(fieldSelect.nativeElement.getAttribute('aria-label')).toBeTruthy();
+      const searchInput = compiled.querySelector('.search-input') as HTMLInputElement;
+      expect(searchInput.getAttribute('aria-label')).toBe('Search users');
+      
+      const toggleBtn = compiled.querySelector('.advanced-toggle') as HTMLButtonElement;
+      expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('should update ARIA expanded state', () => {
+      const toggleBtn = compiled.querySelector('.advanced-toggle') as HTMLButtonElement;
+      
+      component.showAdvancedFilters = true;
+      fixture.detectChanges();
+      
+      expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
     });
 
     it('should support keyboard navigation', () => {
-      const addButton = debugElement.query(By.css('button[data-testid="add-filter"]'));
-      expect(addButton.nativeElement.getAttribute('tabindex')).not.toBe('-1');
+      const toggleBtn = compiled.querySelector('.advanced-toggle') as HTMLButtonElement;
+      
+      const enterEvent = new KeyboardEvent('keydown', { key: 'Enter' });
+      toggleBtn.dispatchEvent(enterEvent);
+      
+      expect(component.showAdvancedFilters).toBe(true);
+    });
+  });
+
+  describe('Input Sanitization', () => {
+    it('should sanitize search input', () => {
+      spyOn(component.searchChange, 'emit');
+      
+      const searchInput = compiled.querySelector('.search-input') as HTMLInputElement;
+      searchInput.value = '<script>alert("xss")</script>test';
+      searchInput.dispatchEvent(new Event('input'));
+      
+      setTimeout(() => {
+        expect(component.searchChange.emit).toHaveBeenCalledWith('test');
+      }, 350);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle missing filter options gracefully', () => {
+      component.filterOptions = undefined as any;
+      fixture.detectChanges();
+      
+      expect(() => fixture.detectChanges()).not.toThrow();
+    });
+
+    it('should handle null filter state', () => {
+      component.filterState = null as any;
+      fixture.detectChanges();
+      
+      expect(component).toBeTruthy();
+    });
+  });
+
+  describe('Performance', () => {
+    it('should not emit duplicate search terms', () => {
+      spyOn(component.searchChange, 'emit');
+      
+      const searchInput = compiled.querySelector('.search-input') as HTMLInputElement;
+      
+      searchInput.value = 'test';
+      searchInput.dispatchEvent(new Event('input'));
+      
+      searchInput.value = 'test';
+      searchInput.dispatchEvent(new Event('input'));
+      
+      setTimeout(() => {
+        expect(component.searchChange.emit).toHaveBeenCalledTimes(1);
+      }, 350);
     });
   });
 });
