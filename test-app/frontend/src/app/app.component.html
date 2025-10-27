@@ -12,20 +12,143 @@
     *ngIf="alertMessage">
   </app-alert>
 
-  <!-- User Form (feature-spezifisch) -->
-  <app-user-form
-    [user]="currentUser"
-    [editMode]="editMode"
-    (save)="saveUser($event)"
-    (cancel)="cancelEdit()">
-  </app-user-form>
+  <!-- Navigation Panel -->
+  <nav class="nav-panel">
+    <div class="nav-items">
+      <button 
+        class="nav-item"
+        [class.active]="currentView === 'create'"
+        (click)="setView('create')">
+        <span class="nav-icon">➕</span>
+        <span class="nav-label">Create User</span>
+      </button>
+      
+      <button 
+        class="nav-item"
+        [class.active]="currentView === 'list'"
+        (click)="setView('list')">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">User List</span>
+      </button>
+      
+      <button 
+        class="nav-item"
+        [class.active]="currentView === 'filter'"
+        (click)="setView('filter')">
+        <span class="nav-icon">🔍</span>
+        <span class="nav-label">Filter Users</span>
+      </button>
+    </div>
+  </nav>
 
-  <!-- User List (feature-spezifisch) -->
-  <app-user-list
-    [users]="users"
-    [loading]="loading"
-    (edit)="editUser($event)"
-    (delete)="deleteUser($event)"
-    (refresh)="loadUsers()">
-  </app-user-list>
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <!-- User Form (feature-spezifisch) -->
+    <div class="content-section" *ngIf="currentView === 'create' || editMode">
+      <app-user-form
+        [user]="currentUser"
+        [editMode]="editMode"
+        (save)="saveUser($event)"
+        (cancel)="cancelEdit()">
+      </app-user-form>
+    </div>
+
+    <!-- User List with Filtering (feature-spezifisch) -->
+    <div class="content-section" *ngIf="currentView === 'list' || currentView === 'filter'">
+      <!-- Quick Filter Bar -->
+      <div class="quick-filter-bar" *ngIf="currentView === 'filter'">
+        <h3 class="filter-title">Filter Users</h3>
+        
+        <div class="filter-controls">
+          <!-- Search Input -->
+          <div class="filter-group">
+            <label for="search-input" class="filter-label">Search</label>
+            <input 
+              id="search-input"
+              type="text" 
+              class="filter-input"
+              placeholder="Search by name or email..."
+              [(ngModel)]="searchTerm"
+              (input)="onSearchChange($event)">
+          </div>
+
+          <!-- Status Filter -->
+          <div class="filter-group">
+            <label for="status-filter" class="filter-label">Status</label>
+            <select 
+              id="status-filter"
+              class="filter-select"
+              [(ngModel)]="statusFilter"
+              (change)="onStatusFilterChange($event)">
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          <!-- Role Filter -->
+          <div class="filter-group">
+            <label for="role-filter" class="filter-label">Role</label>
+            <select 
+              id="role-filter"
+              class="filter-select"
+              [(ngModel)]="roleFilter"
+              (change)="onRoleFilterChange($event)">
+              <option value="">All Roles</option>
+              <option value="admin">Admin</option>
+              <option value="user">User</option>
+              <option value="moderator">Moderator</option>
+            </select>
+          </div>
+
+          <!-- Filter Actions -->
+          <div class="filter-actions">
+            <button 
+              class="btn-clear-filters"
+              (click)="clearAllFilters()"
+              [disabled]="!hasActiveFilters()">
+              Clear Filters
+            </button>
+            
+            <span class="results-count">
+              {{filteredUsersCount}} of {{totalUsersCount}} users
+            </span>
+          </div>
+        </div>
+
+        <!-- Quick Filter Presets -->
+        <div class="filter-presets">
+          <span class="presets-label">Quick Filters:</span>
+          <button 
+            class="preset-btn"
+            [class.active]="activePreset === 'admins'"
+            (click)="applyPreset('admins')">
+            👑 Admins
+          </button>
+          <button 
+            class="preset-btn"
+            [class.active]="activePreset === 'active'"
+            (click)="applyPreset('active')">
+            ✅ Active Users
+          </button>
+          <button 
+            class="preset-btn"
+            [class.active]="activePreset === 'inactive'"
+            (click)="applyPreset('inactive')">
+            ❌ Inactive Users
+          </button>
+        </div>
+      </div>
+
+      <!-- User List -->
+      <app-user-list
+        [users]="filteredUsers"
+        [loading]="loading"
+        [showFilters]="currentView === 'filter'"
+        (edit)="editUser($event)"
+        (delete)="deleteUser($event)"
+        (refresh)="loadUsers()">
+      </app-user-list>
+    </div>
+  </main>
 </div>
