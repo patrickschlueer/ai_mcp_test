@@ -2,251 +2,293 @@
   <!-- Quick Filters Section -->
   <div class="quick-filters-section">
     <h3 class="filter-section-title">Quick Filters</h3>
-    <div class="quick-filters-buttons">
+    <div class="quick-filters-bar">
       <button 
         type="button"
         class="quick-filter-btn"
         [class.active]="activeQuickFilter === 'all'"
-        (click)="onQuickFilter('all')"
-        aria-label="Show all users">
+        (click)="onQuickFilterChange('all')"
+        [attr.aria-pressed]="activeQuickFilter === 'all'"
+        role="button"
+        tabindex="0">
         All Users
       </button>
       <button 
         type="button"
         class="quick-filter-btn"
         [class.active]="activeQuickFilter === 'active'"
-        (click)="onQuickFilter('active')"
-        aria-label="Show active users only">
+        (click)="onQuickFilterChange('active')"
+        [attr.aria-pressed]="activeQuickFilter === 'active'"
+        role="button"
+        tabindex="0">
         Active Only
       </button>
       <button 
         type="button"
         class="quick-filter-btn"
-        [class.active]="activeQuickFilter === 'inactive'"
-        (click)="onQuickFilter('inactive')"
-        aria-label="Show inactive users only">
-        Inactive Only
+        [class.active]="activeQuickFilter === 'admins'"
+        (click)="onQuickFilterChange('admins')"
+        [attr.aria-pressed]="activeQuickFilter === 'admins'"
+        role="button"
+        tabindex="0">
+        Admins
       </button>
       <button 
         type="button"
         class="quick-filter-btn"
-        [class.active]="activeQuickFilter === 'admins'"
-        (click)="onQuickFilter('admins')"
-        aria-label="Show admin users only">
-        Admins Only
+        [class.active]="activeQuickFilter === 'recent'"
+        (click)="onQuickFilterChange('recent')"
+        [attr.aria-pressed]="activeQuickFilter === 'recent'"
+        role="button"
+        tabindex="0">
+        Recent
       </button>
     </div>
   </div>
 
   <!-- Advanced Filters Section -->
   <div class="advanced-filters-section">
-    <div class="section-header">
+    <div class="advanced-filters-header">
       <h3 class="filter-section-title">Advanced Filters</h3>
       <button 
         type="button"
-        class="toggle-btn"
+        class="toggle-advanced-btn"
         (click)="toggleAdvancedFilters()"
         [attr.aria-expanded]="showAdvancedFilters"
-        aria-label="Toggle advanced filters">
+        [attr.aria-controls]="'advanced-filters-panel'"
+        tabindex="0">
+        {{ showAdvancedFilters ? 'Hide' : 'Show' }} Advanced
         <span class="toggle-icon" [class.rotated]="showAdvancedFilters">▼</span>
       </button>
     </div>
 
-    <div class="advanced-filters-content" [class.expanded]="showAdvancedFilters">
-      <!-- Name Filter -->
+    <div 
+      id="advanced-filters-panel"
+      class="advanced-filters-panel"
+      [class.expanded]="showAdvancedFilters"
+      [attr.aria-hidden]="!showAdvancedFilters">
+      
+      <!-- Search Filter -->
       <div class="filter-group">
-        <label for="name-filter" class="filter-label">Search by Name:</label>
-        <div class="input-wrapper">
+        <label for="search-input" class="filter-label">Search</label>
+        <div class="search-input-wrapper">
           <input 
-            id="name-filter"
+            id="search-input"
             type="text"
-            class="filter-input"
-            placeholder="Enter user name..."
-            [(ngModel)]="filters.name"
+            class="filter-input search-input"
+            placeholder="Search by name or email..."
+            [(ngModel)]="filters.searchTerm"
             (input)="onFilterChange()"
-            [attr.aria-describedby]="filters.name ? 'name-filter-clear' : null">
-          <button 
-            *ngIf="filters.name"
-            id="name-filter-clear"
-            type="button"
-            class="clear-btn"
-            (click)="clearNameFilter()"
-            aria-label="Clear name filter">
-            ✕
-          </button>
+            [attr.aria-describedby]="'search-help'"
+            autocomplete="off"
+            maxlength="100">
+          <span class="search-icon">🔍</span>
         </div>
-      </div>
-
-      <!-- Email Filter -->
-      <div class="filter-group">
-        <label for="email-filter" class="filter-label">Search by Email:</label>
-        <div class="input-wrapper">
-          <input 
-            id="email-filter"
-            type="email"
-            class="filter-input"
-            placeholder="Enter email address..."
-            [(ngModel)]="filters.email"
-            (input)="onFilterChange()"
-            [attr.aria-describedby]="filters.email ? 'email-filter-clear' : null">
-          <button 
-            *ngIf="filters.email"
-            id="email-filter-clear"
-            type="button"
-            class="clear-btn"
-            (click)="clearEmailFilter()"
-            aria-label="Clear email filter">
-            ✕
-          </button>
-        </div>
-      </div>
-
-      <!-- Role Filter -->
-      <div class="filter-group">
-        <label for="role-filter" class="filter-label">Filter by Role:</label>
-        <div class="select-wrapper">
-          <select 
-            id="role-filter"
-            class="filter-select"
-            [(ngModel)]="filters.role"
-            (change)="onFilterChange()"
-            aria-label="Select user role">
-            <option value="">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="user">User</option>
-            <option value="moderator">Moderator</option>
-            <option value="guest">Guest</option>
-          </select>
-          <span class="select-arrow">▼</span>
-        </div>
+        <div id="search-help" class="filter-help">Search across name and email fields</div>
       </div>
 
       <!-- Status Filter -->
       <div class="filter-group">
-        <label for="status-filter" class="filter-label">Filter by Status:</label>
-        <div class="select-wrapper">
-          <select 
-            id="status-filter"
-            class="filter-select"
-            [(ngModel)]="filters.status"
-            (change)="onFilterChange()"
-            aria-label="Select user status">
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="pending">Pending</option>
-            <option value="suspended">Suspended</option>
-          </select>
-          <span class="select-arrow">▼</span>
-        </div>
+        <label for="status-select" class="filter-label">Status</label>
+        <select 
+          id="status-select"
+          class="filter-select"
+          [(ngModel)]="filters.status"
+          (change)="onFilterChange()"
+          [attr.aria-describedby]="'status-help'">
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="pending">Pending</option>
+          <option value="suspended">Suspended</option>
+        </select>
+        <div id="status-help" class="filter-help">Filter by user account status</div>
+      </div>
+
+      <!-- Role Filter -->
+      <div class="filter-group">
+        <label for="role-select" class="filter-label">Role</label>
+        <select 
+          id="role-select"
+          class="filter-select"
+          [(ngModel)]="filters.role"
+          (change)="onFilterChange()"
+          [attr.aria-describedby]="'role-help'">
+          <option value="">All Roles</option>
+          <option value="admin">Administrator</option>
+          <option value="user">Standard User</option>
+          <option value="moderator">Moderator</option>
+          <option value="viewer">Viewer</option>
+        </select>
+        <div id="role-help" class="filter-help">Filter by user role/permissions</div>
       </div>
 
       <!-- Date Range Filter -->
-      <div class="filter-group date-range-group">
-        <label class="filter-label">Registration Date Range:</label>
-        <div class="date-range-inputs">
-          <div class="date-input-wrapper">
-            <label for="date-from" class="sr-only">From date</label>
+      <div class="filter-group">
+        <label class="filter-label">Registration Date</label>
+        <div class="date-range-wrapper">
+          <div class="date-input-group">
+            <label for="date-from" class="date-label">From</label>
             <input 
               id="date-from"
               type="date"
               class="filter-input date-input"
-              placeholder="From"
               [(ngModel)]="filters.dateFrom"
               (change)="onFilterChange()"
               [max]="filters.dateTo || maxDate">
-            <span class="date-label">From</span>
           </div>
-          <div class="date-separator">–</div>
-          <div class="date-input-wrapper">
-            <label for="date-to" class="sr-only">To date</label>
+          <div class="date-input-group">
+            <label for="date-to" class="date-label">To</label>
             <input 
               id="date-to"
               type="date"
               class="filter-input date-input"
-              placeholder="To"
               [(ngModel)]="filters.dateTo"
               (change)="onFilterChange()"
               [min]="filters.dateFrom"
               [max]="maxDate">
-            <span class="date-label">To</span>
           </div>
         </div>
+        <div class="filter-help">Filter by user registration date range</div>
+      </div>
+
+      <!-- Department Filter -->
+      <div class="filter-group">
+        <label for="department-select" class="filter-label">Department</label>
+        <select 
+          id="department-select"
+          class="filter-select"
+          [(ngModel)]="filters.department"
+          (change)="onFilterChange()"
+          [attr.aria-describedby]="'department-help'">
+          <option value="">All Departments</option>
+          <option *ngFor="let dept of availableDepartments" [value]="dept.value">
+            {{ dept.label }}
+          </option>
+        </select>
+        <div id="department-help" class="filter-help">Filter by user department</div>
       </div>
     </div>
   </div>
 
   <!-- Filter Actions -->
   <div class="filter-actions">
-    <div class="results-info">
-      <span class="results-count" *ngIf="filteredCount !== undefined">
-        Showing {{ filteredCount }} of {{ totalCount }} users
-      </span>
-    </div>
-    
-    <div class="action-buttons">
+    <div class="filter-actions-left">
       <button 
         type="button"
         class="action-btn secondary"
-        (click)="onResetFilters()"
+        (click)="onClearFilters()"
         [disabled]="!hasActiveFilters"
-        aria-label="Reset all filters">
-        Reset Filters
+        [attr.aria-describedby]="'clear-help'"
+        tabindex="0">
+        Clear All
       </button>
-      
+      <div id="clear-help" class="sr-only">Clear all applied filters</div>
+    </div>
+    
+    <div class="filter-actions-right">
+      <button 
+        type="button"
+        class="action-btn secondary"
+        (click)="onSavePreset()"
+        [disabled]="!hasActiveFilters"
+        [attr.aria-describedby]="'save-help'"
+        tabindex="0">
+        Save Preset
+      </button>
       <button 
         type="button"
         class="action-btn primary"
-        (click)="onSaveFilterPreset()"
-        [disabled]="!hasActiveFilters"
-        aria-label="Save current filter as preset">
-        Save as Preset
+        (click)="onApplyFilters()"
+        [disabled]="isLoading"
+        [attr.aria-describedby]="'apply-help'"
+        tabindex="0">
+        <span *ngIf="isLoading" class="loading-spinner"></span>
+        {{ isLoading ? 'Applying...' : 'Apply Filters' }}
       </button>
+      <div id="save-help" class="sr-only">Save current filter configuration as preset</div>
+      <div id="apply-help" class="sr-only">Apply current filter settings</div>
     </div>
   </div>
 
-  <!-- Filter Presets -->
-  <div class="filter-presets-section" *ngIf="filterPresets && filterPresets.length > 0">
-    <h4 class="presets-title">Saved Filter Presets</h4>
-    <div class="presets-list">
-      <div 
-        *ngFor="let preset of filterPresets; trackBy: trackPreset"
-        class="preset-item"
-        [class.active]="activePresetId === preset.id">
-        <button 
-          type="button"
-          class="preset-btn"
-          (click)="onApplyPreset(preset)"
-          [attr.aria-label]="'Apply filter preset: ' + preset.name">
-          {{ preset.name }}
-        </button>
-        <button 
-          type="button"
-          class="preset-delete-btn"
-          (click)="onDeletePreset(preset.id)"
-          [attr.aria-label]="'Delete filter preset: ' + preset.name">
-          ✕
-        </button>
-      </div>
+  <!-- Filter Summary -->
+  <div class="filter-summary" *ngIf="hasActiveFilters">
+    <div class="summary-header">
+      <span class="summary-title">Active Filters:</span>
+      <span class="results-count" *ngIf="filteredCount !== null">
+        {{ filteredCount }} {{ filteredCount === 1 ? 'result' : 'results' }} found
+      </span>
+    </div>
+    <div class="active-filters-list">
+      <span 
+        *ngIf="filters.searchTerm"
+        class="filter-tag"
+        role="button"
+        tabindex="0"
+        (click)="removeFilter('searchTerm')"
+        (keydown.enter)="removeFilter('searchTerm')"
+        [attr.aria-label]="'Remove search filter: ' + filters.searchTerm">
+        Search: "{{ filters.searchTerm }}"
+        <span class="remove-icon">×</span>
+      </span>
+      <span 
+        *ngIf="filters.status"
+        class="filter-tag"
+        role="button"
+        tabindex="0"
+        (click)="removeFilter('status')"
+        (keydown.enter)="removeFilter('status')"
+        [attr.aria-label]="'Remove status filter: ' + filters.status">
+        Status: {{ filters.status | titlecase }}
+        <span class="remove-icon">×</span>
+      </span>
+      <span 
+        *ngIf="filters.role"
+        class="filter-tag"
+        role="button"
+        tabindex="0"
+        (click)="removeFilter('role')"
+        (keydown.enter)="removeFilter('role')"
+        [attr.aria-label]="'Remove role filter: ' + filters.role">
+        Role: {{ filters.role | titlecase }}
+        <span class="remove-icon">×</span>
+      </span>
+      <span 
+        *ngIf="filters.dateFrom || filters.dateTo"
+        class="filter-tag"
+        role="button"
+        tabindex="0"
+        (click)="removeFilter('dateRange')"
+        (keydown.enter)="removeFilter('dateRange')"
+        aria-label="Remove date range filter">
+        Date: {{ getDateRangeText() }}
+        <span class="remove-icon">×</span>
+      </span>
+      <span 
+        *ngIf="filters.department"
+        class="filter-tag"
+        role="button"
+        tabindex="0"
+        (click)="removeFilter('department')"
+        (keydown.enter)="removeFilter('department')"
+        [attr.aria-label]="'Remove department filter: ' + filters.department">
+        Dept: {{ getDepartmentLabel(filters.department) }}
+        <span class="remove-icon">×</span>
+      </span>
     </div>
   </div>
 
-  <!-- Loading State -->
-  <div class="loading-state" *ngIf="isLoading" role="status" aria-live="polite">
-    <div class="loading-spinner"></div>
-    <span class="loading-text">Applying filters...</span>
-  </div>
-
-  <!-- Error State -->
-  <div class="error-state" *ngIf="errorMessage" role="alert" aria-live="assertive">
+  <!-- Error Display -->
+  <div class="filter-error" *ngIf="errorMessage" role="alert" aria-live="polite">
     <span class="error-icon">⚠️</span>
     <span class="error-text">{{ errorMessage }}</span>
     <button 
-      type="button"
-      class="error-dismiss-btn"
+      type="button" 
+      class="error-dismiss"
       (click)="dismissError()"
-      aria-label="Dismiss error message">
-      ✕
+      aria-label="Dismiss error message"
+      tabindex="0">
+      ×
     </button>
   </div>
 </div>
