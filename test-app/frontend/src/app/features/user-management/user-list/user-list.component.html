@@ -1,31 +1,9 @@
 <div class="card">
   <div class="card-header">
-    <h2>Users ({{ filteredUsers.length }} of {{ users.length }})</h2>
+    <h2>Users ({{ users.length }})</h2>
     <button class="btn btn-refresh" (click)="onRefresh()">
       🔄 Refresh
     </button>
-  </div>
-
-  <div class="filter-section">
-    <div class="search-container">
-      <input
-        type="text"
-        class="search-input"
-        placeholder="Search users by name or email..."
-        [(ngModel)]="searchTerm"
-        (input)="onSearchChange($event)"
-        aria-label="Search users"
-      />
-      <span class="search-icon">🔍</span>
-      <button
-        *ngIf="searchTerm"
-        class="clear-search"
-        (click)="clearSearch()"
-        aria-label="Clear search"
-      >
-        ✕
-      </button>
-    </div>
   </div>
 
   <div class="loading" *ngIf="loading">Loading users...</div>
@@ -34,12 +12,7 @@
     No users found. Create one above!
   </div>
 
-  <div class="no-results" *ngIf="!loading && users.length > 0 && filteredUsers.length === 0">
-    <p>No users match your search criteria.</p>
-    <button class="btn btn-secondary" (click)="clearSearch()">Clear filters</button>
-  </div>
-
-  <table *ngIf="!loading && filteredUsers.length > 0">
+  <table *ngIf="!loading && users.length > 0">
     <thead>
       <tr>
         <th>Name</th>
@@ -51,7 +24,7 @@
     </thead>
     <tbody>
       <app-user-table-row 
-        *ngFor="let user of filteredUsers"
+        *ngFor="let user of users"
         [user]="user"
         (edit)="onEdit($event)"
         (delete)="onDelete($event)">
