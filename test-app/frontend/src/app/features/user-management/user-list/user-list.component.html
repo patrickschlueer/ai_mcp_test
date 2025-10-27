@@ -6,6 +6,13 @@
     </button>
   </div>
 
+  <div class="filter-section">
+    <div class="filter-group">
+      <label for="search">Search users:</label>
+      <input type="text" id="search" class="search-input" [(ngModel)]="searchTerm" (input)="filterUsers()" placeholder="Search by name or email">
+    </div>
+  </div>
+
   <div class="loading" *ngIf="loading">Loading users...</div>
 
   <div class="no-data" *ngIf="!loading && users.length === 0">
@@ -24,7 +31,7 @@
     </thead>
     <tbody>
       <app-user-table-row 
-        *ngFor="let user of users"
+        *ngFor="let user of filteredUsers"
         [user]="user"
         (edit)="onEdit($event)"
         (delete)="onDelete($event)">
