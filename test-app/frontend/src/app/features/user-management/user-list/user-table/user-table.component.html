@@ -1,0 +1,366 @@
+<div class="user-table-container">
+  <!-- Filter Controls -->
+  <div class="filter-section">
+    <div class="quick-filters">
+      <button 
+        class="quick-filter-btn" 
+        [class.active]="activeQuickFilter === 'all'"
+        (click)="applyQuickFilter('all')"
+        type="button"
+        aria-label="Show all users">
+        All Users
+      </button>
+      <button 
+        class="quick-filter-btn" 
+        [class.active]="activeQuickFilter === 'active'"
+        (click)="applyQuickFilter('active')"
+        type="button"
+        aria-label="Show only active users">
+        Active Only
+      </button>
+      <button 
+        class="quick-filter-btn" 
+        [class.active]="activeQuickFilter === 'admins'"
+        (click)="applyQuickFilter('admins')"
+        type="button"
+        aria-label="Show only administrators">
+        Admins
+      </button>
+      <button 
+        class="quick-filter-btn" 
+        [class.active]="activeQuickFilter === 'recent'"
+        (click)="applyQuickFilter('recent')"
+        type="button"
+        aria-label="Show recently created users">
+        Recent
+      </button>
+    </div>
+
+    <div class="advanced-filters" [class.expanded]="showAdvancedFilters">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label for="nameFilter" class="filter-label">Name</label>
+          <input 
+            id="nameFilter"
+            type="text" 
+            class="filter-input"
+            placeholder="Search by name..."
+            [(ngModel)]="filters.name"
+            (input)="onFilterChange('name', $event)"
+            [attr.aria-describedby]="'nameFilter-desc'"
+            maxlength="100">
+          <div id="nameFilter-desc" class="sr-only">Filter users by first or last name</div>
+        </div>
+
+        <div class="filter-group">
+          <label for="emailFilter" class="filter-label">Email</label>
+          <input 
+            id="emailFilter"
+            type="email" 
+            class="filter-input"
+            placeholder="Search by email..."
+            [(ngModel)]="filters.email"
+            (input)="onFilterChange('email', $event)"
+            [attr.aria-describedby]="'emailFilter-desc'"
+            maxlength="254">
+          <div id="emailFilter-desc" class="sr-only">Filter users by email address</div>
+        </div>
+
+        <div class="filter-group">
+          <label for="roleFilter" class="filter-label">Role</label>
+          <select 
+            id="roleFilter"
+            class="filter-select"
+            [(ngModel)]="filters.role"
+            (change)="onFilterChange('role', $event)"
+            [attr.aria-describedby]="'roleFilter-desc'">
+            <option value="">All Roles</option>
+            <option value="admin">Administrator</option>
+            <option value="user">User</option>
+            <option value="moderator">Moderator</option>
+          </select>
+          <div id="roleFilter-desc" class="sr-only">Filter users by their assigned role</div>
+        </div>
+
+        <div class="filter-group">
+          <label for="statusFilter" class="filter-label">Status</label>
+          <select 
+            id="statusFilter"
+            class="filter-select"
+            [(ngModel)]="filters.status"
+            (change)="onFilterChange('status', $event)"
+            [attr.aria-describedby]="'statusFilter-desc'">
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="pending">Pending</option>
+            <option value="suspended">Suspended</option>
+          </select>
+          <div id="statusFilter-desc" class="sr-only">Filter users by account status</div>
+        </div>
+      </div>
+
+      <div class="filter-actions">
+        <button 
+          type="button"
+          class="btn btn-secondary"
+          (click)="clearFilters()"
+          [disabled]="!hasActiveFilters"
+          aria-label="Clear all filters">
+          Clear Filters
+        </button>
+        <button 
+          type="button"
+          class="btn btn-primary"
+          (click)="saveFilterPreset()"
+          [disabled]="!hasActiveFilters"
+          aria-label="Save current filter configuration">
+          Save Preset
+        </button>
+      </div>
+    </div>
+
+    <div class="filter-toggle">
+      <button 
+        type="button"
+        class="toggle-btn"
+        (click)="toggleAdvancedFilters()"
+        [attr.aria-expanded]="showAdvancedFilters"
+        aria-label="Toggle advanced filters">
+        <span class="toggle-icon" [class.rotated]="showAdvancedFilters">▼</span>
+        {{ showAdvancedFilters ? 'Hide' : 'Show' }} Advanced Filters
+      </button>
+    </div>
+  </div>
+
+  <!-- Results Summary -->
+  <div class="results-summary" role="status" aria-live="polite">
+    <span class="result-count">{{ filteredUsers.length }} of {{ totalUsers }} users</span>
+    <span class="active-filters" *ngIf="hasActiveFilters">
+      ({{ getActiveFiltersCount() }} filter{{ getActiveFiltersCount() > 1 ? 's' : '' }} applied)
+    </span>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="isLoading" role="status" aria-label="Loading users">
+    <div class="loading-spinner"></div>
+    <span>Loading users...</span>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" *ngIf="!isLoading && filteredUsers.length === 0">
+    <div class="empty-icon">👥</div>
+    <h3 class="empty-title">No users found</h3>
+    <p class="empty-message">
+      {{ hasActiveFilters ? 'Try adjusting your filters or' : 'There are no users to display.' }}
+      <button type="button" class="link-btn" (click)="clearFilters()" *ngIf="hasActiveFilters">
+        clear all filters
+      </button>
+    </p>
+  </div>
+
+  <!-- User Table -->
+  <div class="table-container" *ngIf="!isLoading && filteredUsers.length > 0">
+    <table class="user-table" role="table" aria-label="User management table">
+      <thead>
+        <tr role="row">
+          <th 
+            role="columnheader" 
+            class="sortable-header"
+            [class.sorted]="sortField === 'name'"
+            [class.desc]="sortField === 'name' && sortDirection === 'desc'"
+            (click)="onSort('name')"
+            [attr.aria-sort]="getSortAriaLabel('name')"
+            tabindex="0"
+            (keydown.enter)="onSort('name')"
+            (keydown.space)="onSort('name')">
+            Name
+            <span class="sort-indicator" aria-hidden="true"></span>
+          </th>
+          <th 
+            role="columnheader" 
+            class="sortable-header"
+            [class.sorted]="sortField === 'email'"
+            [class.desc]="sortField === 'email' && sortDirection === 'desc'"
+            (click)="onSort('email')"
+            [attr.aria-sort]="getSortAriaLabel('email')"
+            tabindex="0"
+            (keydown.enter)="onSort('email')"
+            (keydown.space)="onSort('email')">
+            Email
+            <span class="sort-indicator" aria-hidden="true"></span>
+          </th>
+          <th 
+            role="columnheader" 
+            class="sortable-header"
+            [class.sorted]="sortField === 'role'"
+            [class.desc]="sortField === 'role' && sortDirection === 'desc'"
+            (click)="onSort('role')"
+            [attr.aria-sort]="getSortAriaLabel('role')"
+            tabindex="0"
+            (keydown.enter)="onSort('role')"
+            (keydown.space)="onSort('role')">
+            Role
+            <span class="sort-indicator" aria-hidden="true"></span>
+          </th>
+          <th 
+            role="columnheader" 
+            class="sortable-header"
+            [class.sorted]="sortField === 'status'"
+            [class.desc]="sortField === 'status' && sortDirection === 'desc'"
+            (click)="onSort('status')"
+            [attr.aria-sort]="getSortAriaLabel('status')"
+            tabindex="0"
+            (keydown.enter)="onSort('status')"
+            (keydown.space)="onSort('status')">
+            Status
+            <span class="sort-indicator" aria-hidden="true"></span>
+          </th>
+          <th 
+            role="columnheader" 
+            class="sortable-header"
+            [class.sorted]="sortField === 'lastLogin'"
+            [class.desc]="sortField === 'lastLogin' && sortDirection === 'desc'"
+            (click)="onSort('lastLogin')"
+            [attr.aria-sort]="getSortAriaLabel('lastLogin')"
+            tabindex="0"
+            (keydown.enter)="onSort('lastLogin')"
+            (keydown.space)="onSort('lastLogin')">
+            Last Login
+            <span class="sort-indicator" aria-hidden="true"></span>
+          </th>
+          <th role="columnheader" class="actions-header">
+            Actions
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr 
+          role="row" 
+          *ngFor="let user of paginatedUsers; trackBy: trackByUserId; let i = index"
+          class="user-row"
+          [class.selected]="selectedUsers.has(user.id)"
+          [attr.aria-rowindex]="i + 1">
+          <td role="gridcell" class="name-cell">
+            <div class="user-info">
+              <div class="user-avatar" [attr.aria-label]="'Avatar for ' + user.firstName + ' ' + user.lastName">
+                {{ getUserInitials(user) }}
+              </div>
+              <div class="user-details">
+                <span class="user-name">{{ user.firstName }} {{ user.lastName }}</span>
+                <span class="user-id" *ngIf="user.id">#{{ user.id }}</span>
+              </div>
+            </div>
+          </td>
+          <td role="gridcell" class="email-cell">
+            <a [href]="'mailto:' + user.email" class="email-link" [title]="'Send email to ' + user.email">
+              {{ user.email }}
+            </a>
+          </td>
+          <td role="gridcell" class="role-cell">
+            <span class="role-badge" [class]="'role-' + user.role.toLowerCase()">
+              {{ user.role | titlecase }}
+            </span>
+          </td>
+          <td role="gridcell" class="status-cell">
+            <span class="status-indicator" [class]="'status-' + user.status.toLowerCase()">
+              <span class="status-dot" aria-hidden="true"></span>
+              {{ user.status | titlecase }}
+            </span>
+          </td>
+          <td role="gridcell" class="date-cell">
+            <span class="date-display" [title]="user.lastLogin | date:'full'">
+              {{ user.lastLogin | date:'short' }}
+            </span>
+          </td>
+          <td role="gridcell" class="actions-cell">
+            <div class="action-buttons">
+              <button 
+                type="button"
+                class="action-btn edit-btn"
+                (click)="onEditUser(user)"
+                [attr.aria-label]="'Edit user ' + user.firstName + ' ' + user.lastName"
+                title="Edit User">
+                ✏️
+              </button>
+              <button 
+                type="button"
+                class="action-btn delete-btn"
+                (click)="onDeleteUser(user)"
+                [attr.aria-label]="'Delete user ' + user.firstName + ' ' + user.lastName"
+                title="Delete User">
+                🗑️
+              </button>
+              <button 
+                type="button"
+                class="action-btn toggle-btn"
+                (click)="onToggleUserStatus(user)"
+                [attr.aria-label]="(user.status === 'active' ? 'Deactivate' : 'Activate') + ' user ' + user.firstName + ' ' + user.lastName"
+                [title]="user.status === 'active' ? 'Deactivate User' : 'Activate User'">
+                {{ user.status === 'active' ? '⏸️' : '▶️' }}
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination-container" *ngIf="!isLoading && filteredUsers.length > pageSize">
+    <div class="pagination-info">
+      Showing {{ getStartIndex() + 1 }} - {{ getEndIndex() }} of {{ filteredUsers.length }} users
+    </div>
+    <nav class="pagination-nav" role="navigation" aria-label="User table pagination">
+      <button 
+        type="button"
+        class="page-btn"
+        [disabled]="currentPage === 1"
+        (click)="goToPage(1)"
+        aria-label="Go to first page">
+        ⏮️
+      </button>
+      <button 
+        type="button"
+        class="page-btn"
+        [disabled]="currentPage === 1"
+        (click)="goToPage(currentPage - 1)"
+        aria-label="Go to previous page">
+        ◀️
+      </button>
+      <span class="page-info">
+        Page {{ currentPage }} of {{ getTotalPages() }}
+      </span>
+      <button 
+        type="button"
+        class="page-btn"
+        [disabled]="currentPage === getTotalPages()"
+        (click)="goToPage(currentPage + 1)"
+        aria-label="Go to next page">
+        ▶️
+      </button>
+      <button 
+        type="button"
+        class="page-btn"
+        [disabled]="currentPage === getTotalPages()"
+        (click)="goToPage(getTotalPages())"
+        aria-label="Go to last page">
+        ⏭️
+      </button>
+    </nav>
+    <div class="page-size-selector">
+      <label for="pageSizeSelect">Show:</label>
+      <select 
+        id="pageSizeSelect"
+        [(ngModel)]="pageSize"
+        (change)="onPageSizeChange($event)"
+        class="page-size-select">
+        <option [value]="10">10</option>
+        <option [value]="25">25</option>
+        <option [value]="50">50</option>
+        <option [value]="100">100</option>
+      </select>
+      <span>per page</span>
+    </div>
+  </div>
+</div>
