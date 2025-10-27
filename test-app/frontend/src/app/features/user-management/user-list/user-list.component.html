@@ -8,23 +8,24 @@
 
   <div class="filter-section">
     <div class="search-container">
-      <input 
-        type="text" 
+      <input
+        type="text"
         class="search-input"
         placeholder="Search users by name or email..."
         [(ngModel)]="searchTerm"
         (input)="onSearchChange($event)"
-        aria-label="Search users">
+        aria-label="Search users"
+      />
       <span class="search-icon">🔍</span>
+      <button
+        *ngIf="searchTerm"
+        class="clear-search"
+        (click)="clearSearch()"
+        aria-label="Clear search"
+      >
+        ✕
+      </button>
     </div>
-    
-    <button 
-      *ngIf="searchTerm" 
-      class="btn btn-clear" 
-      (click)="clearSearch()"
-      aria-label="Clear search">
-      ✕ Clear
-    </button>
   </div>
 
   <div class="loading" *ngIf="loading">Loading users...</div>
@@ -35,7 +36,7 @@
 
   <div class="no-results" *ngIf="!loading && users.length > 0 && filteredUsers.length === 0">
     <p>No users match your search criteria.</p>
-    <button class="btn btn-clear" (click)="clearSearch()">Clear search</button>
+    <button class="btn btn-secondary" (click)="clearSearch()">Clear filters</button>
   </div>
 
   <table *ngIf="!loading && filteredUsers.length > 0">
