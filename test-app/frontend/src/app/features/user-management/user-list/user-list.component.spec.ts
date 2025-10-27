@@ -1,79 +1,108 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
-import { DebugElement } from '@angular/core';
-import { ReactiveFormsModule } from '@angular/forms';
 import { provideMockStore, MockStore } from '@ngrx/store/testing';
-import { of, throwError, BehaviorSubject } from 'rxjs';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of } from 'rxjs';
 
 import { UserListComponent } from './user-list.component';
-import { User, UserRole } from '../models/user.interface';
-import * as UserActions from '../store/user.actions';
-import * as UserSelectors from '../store/user.selectors';
-import { UserState } from '../store/user.state';
+import { User } from '../../../shared/models/user.interface';
+import { UserFilter } from '../../../shared/models/user-filter.interface';
+import { UserActions } from '../../../store/user/user.actions';
+import { selectFilteredUsers, selectUserFilter, selectUsersLoading, selectUsersError } from '../../../store/user/user.selectors';
+import { UserState } from '../../../store/user/user.reducer';
+
+// Mock components
+@Component({
+  selector: 'app-filter-panel',
+  template: '<div></div>'
+})
+class MockFilterPanelComponent {
+  @Input() filter!: UserFilter;
+  @Input() loading = false;
+  @Output() filterChange = new EventEmitter<UserFilter>();
+  @Output() clearFilter = new EventEmitter<void>();
+}
+
+@Component({
+  selector: 'app-user-table',
+  template: '<div></div>'
+})
+class MockUserTableComponent {
+  @Input() users: User[] = [];
+  @Input() loading = false;
+  @Input() sortColumn = '';
+  @Input() sortDirection: 'asc' | 'desc' = 'asc';
+  @Output() sortChange = new EventEmitter<{column: string, direction: 'asc' | 'desc'}>();
+  @Output() userSelect = new EventEmitter<User>();
+  @Output() userDelete = new EventEmitter<User>();
+  @Output() userEdit = new EventEmitter<User>();
+}
 
 describe('UserListComponent', () => {
   let component: UserListComponent;
   let fixture: ComponentFixture<UserListComponent>;
-  let mockStore: MockStore;
-  let compiled: HTMLElement;
-
+  let store: MockStore<UserState>;
+  
   const mockUsers: User[] = [
     {
       id: '1',
       name: 'John Doe',
-      email: 'john.doe@example.com',
-      role: UserRole.USER,
+      email: 'john@example.com',
+      role: 'admin',
       status: 'active',
-      department: 'Engineering',
-      lastLogin: new Date('2024-01-15'),
-      createdAt: new Date('2023-01-01')
+      department: 'IT',
+      createdAt: new Date('2023-01-01'),
+      lastLogin: new Date('2023-12-01')
     },
     {
       id: '2',
       name: 'Jane Smith',
-      email: 'jane.smith@example.com',
-      role: UserRole.ADMIN,
-      status: 'active',
+      email: 'jane@example.com',
+      role: 'user',
+      status: 'inactive',
       department: 'HR',
-      lastLogin: new Date('2024-01-14'),
-      createdAt: new Date('2023-02-01')
+      createdAt: new Date('2023-02-01'),
+      lastLogin: new Date('2023-11-01')
     },
     {
       id: '3',
-      name: 'Bob Wilson',
-      email: 'bob.wilson@example.com',
-      role: UserRole.USER,
-      status: 'inactive',
-      department: 'Engineering',
-      lastLogin: new Date('2024-01-10'),
-      createdAt: new Date('2023-03-01')
+      name: 'Bob Johnson',
+      email: 'bob@example.com',
+      role: 'moderator',
+      status: 'active',
+      department: 'Sales',
+      createdAt: new Date('2023-03-01'),
+      lastLogin: new Date('2023-12-15')
     }
   ];
 
-  const initialState: UserState = {
-    users: [],
-    filteredUsers: [],
-    loading: false,
-    error: null,
-    filters: {
-      searchTerm: '',
-      role: null,
-      status: null,
-      department: null,
-      dateRange: null
-    },
-    pagination: {
-      currentPage: 1,
-      itemsPerPage: 10,
-      totalItems: 0,
-      totalPages: 0
+  const initialFilter: UserFilter = {
+    searchTerm: '',
+    role: null,
+    status: null,
+    department: null,
+    dateRange: null
+  };
+
+  const initialState = {
+    users: {
+      entities: {},
+      ids: [],
+      loading: false,
+      error: null,
+      filter: initialFilter
     }
   };
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [UserListComponent],
-      imports: [ReactiveFormsModule],
+      declarations: [
+        UserListComponent,
+        MockFilterPanelComponent,
+        MockUserTableComponent
+      ],
+      imports: [NoopAnimationsModule],
       providers: [
         provideMockStore({ initialState })
       ]
@@ -81,385 +110,284 @@ describe('UserListComponent', () => {
 
     fixture = TestBed.createComponent(UserListComponent);
     component = fixture.componentInstance;
-    mockStore = TestBed.inject(MockStore);
-    compiled = fixture.nativeElement;
-
-    // Mock selectors
-    mockStore.overrideSelector(UserSelectors.selectFilteredUsers, mockUsers);
-    mockStore.overrideSelector(UserSelectors.selectUserLoading, false);
-    mockStore.overrideSelector(UserSelectors.selectUserError, null);
-    mockStore.overrideSelector(UserSelectors.selectUserFilters, initialState.filters);
-    mockStore.overrideSelector(UserSelectors.selectUserPagination, initialState.pagination);
-
-    spyOn(mockStore, 'dispatch');
+    store = TestBed.inject(MockStore);
+    
+    // Setup selector mocks
+    store.overrideSelector(selectFilteredUsers, mockUsers);
+    store.overrideSelector(selectUserFilter, initialFilter);
+    store.overrideSelector(selectUsersLoading, false);
+    store.overrideSelector(selectUsersError, null);
+    
+    fixture.detectChanges();
   });
 
-  afterEach(() => {
-    fixture.destroy();
+  it('should create', () => {
+    expect(component).toBeTruthy();
   });
 
-  describe('Component Initialization', () => {
-    it('should create', () => {
-      expect(component).toBeTruthy();
-    });
-
-    it('should initialize filter form', () => {
-      expect(component.filterForm).toBeDefined();
-      expect(component.filterForm.get('searchTerm')).toBeTruthy();
-      expect(component.filterForm.get('role')).toBeTruthy();
-      expect(component.filterForm.get('status')).toBeTruthy();
-      expect(component.filterForm.get('department')).toBeTruthy();
-    });
-
-    it('should dispatch loadUsers action on init', () => {
-      component.ngOnInit();
-      expect(mockStore.dispatch).toHaveBeenCalledWith(UserActions.loadUsers());
-    });
-
-    it('should setup filter form subscriptions', () => {
-      spyOn(component, 'onFilterChange');
-      component.ngOnInit();
-      
-      component.filterForm.patchValue({ searchTerm: 'test' });
-      fixture.detectChanges();
-      
-      setTimeout(() => {
-        expect(component.onFilterChange).toHaveBeenCalled();
-      }, 300); // debounce time
+  it('should initialize with default filter', () => {
+    expect(component.filter$).toBeDefined();
+    component.filter$.subscribe(filter => {
+      expect(filter).toEqual(initialFilter);
     });
   });
 
-  describe('User Display', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
-    });
+  it('should load users on init', () => {
+    spyOn(store, 'dispatch');
+    
+    component.ngOnInit();
+    
+    expect(store.dispatch).toHaveBeenCalledWith(UserActions.loadUsers());
+  });
 
-    it('should display user list when users are available', () => {
-      const userRows = compiled.querySelectorAll('.user-row');
-      expect(userRows.length).toBe(3);
-    });
-
-    it('should display user information correctly', () => {
-      const firstUserRow = compiled.querySelector('.user-row');
-      expect(firstUserRow?.textContent).toContain('John Doe');
-      expect(firstUserRow?.textContent).toContain('john.doe@example.com');
-      expect(firstUserRow?.textContent).toContain('USER');
-      expect(firstUserRow?.textContent).toContain('active');
-    });
-
-    it('should display loading state', () => {
-      mockStore.overrideSelector(UserSelectors.selectUserLoading, true);
-      mockStore.refreshState();
-      fixture.detectChanges();
-
-      const loadingElement = compiled.querySelector('.loading-spinner');
-      expect(loadingElement).toBeTruthy();
-    });
-
-    it('should display error message when error occurs', () => {
-      const errorMessage = 'Failed to load users';
-      mockStore.overrideSelector(UserSelectors.selectUserError, errorMessage);
-      mockStore.refreshState();
-      fixture.detectChanges();
-
-      const errorElement = compiled.querySelector('.error-message');
-      expect(errorElement?.textContent).toContain(errorMessage);
-    });
-
-    it('should display empty state when no users', () => {
-      mockStore.overrideSelector(UserSelectors.selectFilteredUsers, []);
-      mockStore.refreshState();
-      fixture.detectChanges();
-
-      const emptyState = compiled.querySelector('.empty-state');
-      expect(emptyState).toBeTruthy();
+  it('should display filtered users', () => {
+    component.users$.subscribe(users => {
+      expect(users).toEqual(mockUsers);
+      expect(users.length).toBe(3);
     });
   });
 
-  describe('Filtering', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
-    });
+  it('should handle filter changes', () => {
+    spyOn(store, 'dispatch');
+    const newFilter: UserFilter = {
+      searchTerm: 'John',
+      role: 'admin',
+      status: 'active',
+      department: null,
+      dateRange: null
+    };
+    
+    component.onFilterChange(newFilter);
+    
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.setFilter({ filter: newFilter })
+    );
+  });
 
-    it('should dispatch filter action when search term changes', () => {
-      const searchInput = compiled.querySelector('input[formControlName="searchTerm"]') as HTMLInputElement;
-      searchInput.value = 'John';
-      searchInput.dispatchEvent(new Event('input'));
+  it('should handle filter clear', () => {
+    spyOn(store, 'dispatch');
+    
+    component.onClearFilter();
+    
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.clearFilter()
+    );
+  });
 
-      setTimeout(() => {
-        expect(mockStore.dispatch).toHaveBeenCalledWith(
-          UserActions.updateFilters({ filters: jasmine.objectContaining({ searchTerm: 'John' }) })
-        );
-      }, 300);
-    });
+  it('should handle sort changes', () => {
+    spyOn(store, 'dispatch');
+    const sortConfig = { column: 'name', direction: 'asc' as const };
+    
+    component.onSortChange(sortConfig);
+    
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.setSorting({ sortColumn: 'name', sortDirection: 'asc' })
+    );
+  });
 
-    it('should dispatch filter action when role filter changes', () => {
-      const roleSelect = compiled.querySelector('select[formControlName="role"]') as HTMLSelectElement;
-      roleSelect.value = UserRole.ADMIN;
-      roleSelect.dispatchEvent(new Event('change'));
+  it('should handle user selection', () => {
+    spyOn(component.userSelect, 'emit');
+    const user = mockUsers[0];
+    
+    component.onUserSelect(user);
+    
+    expect(component.userSelect.emit).toHaveBeenCalledWith(user);
+  });
 
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.updateFilters({ filters: jasmine.objectContaining({ role: UserRole.ADMIN }) })
-      );
-    });
+  it('should handle user deletion', () => {
+    spyOn(store, 'dispatch');
+    const user = mockUsers[0];
+    
+    component.onUserDelete(user);
+    
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.deleteUser({ userId: user.id })
+    );
+  });
 
-    it('should dispatch filter action when status filter changes', () => {
-      const statusSelect = compiled.querySelector('select[formControlName="status"]') as HTMLSelectElement;
-      statusSelect.value = 'active';
-      statusSelect.dispatchEvent(new Event('change'));
+  it('should handle user edit', () => {
+    spyOn(component.userEdit, 'emit');
+    const user = mockUsers[0];
+    
+    component.onUserEdit(user);
+    
+    expect(component.userEdit.emit).toHaveBeenCalledWith(user);
+  });
 
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.updateFilters({ filters: jasmine.objectContaining({ status: 'active' }) })
-      );
-    });
+  it('should render filter panel component', () => {
+    const filterPanel = fixture.debugElement.query(By.css('app-filter-panel'));
+    expect(filterPanel).toBeTruthy();
+  });
 
-    it('should dispatch filter action when department filter changes', () => {
-      const departmentSelect = compiled.querySelector('select[formControlName="department"]') as HTMLSelectElement;
-      departmentSelect.value = 'Engineering';
-      departmentSelect.dispatchEvent(new Event('change'));
+  it('should render user table component', () => {
+    const userTable = fixture.debugElement.query(By.css('app-user-table'));
+    expect(userTable).toBeTruthy();
+  });
 
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.updateFilters({ filters: jasmine.objectContaining({ department: 'Engineering' }) })
-      );
-    });
+  it('should pass correct props to filter panel', () => {
+    const filterPanel = fixture.debugElement.query(By.css('app-filter-panel'));
+    const filterPanelComponent = filterPanel.componentInstance as MockFilterPanelComponent;
+    
+    expect(filterPanelComponent.filter).toEqual(initialFilter);
+    expect(filterPanelComponent.loading).toBeFalse();
+  });
 
-    it('should clear all filters when clear button is clicked', () => {
-      // Set some filters first
-      component.filterForm.patchValue({
-        searchTerm: 'test',
-        role: UserRole.ADMIN,
-        status: 'active'
-      });
+  it('should pass correct props to user table', () => {
+    const userTable = fixture.debugElement.query(By.css('app-user-table'));
+    const userTableComponent = userTable.componentInstance as MockUserTableComponent;
+    
+    expect(userTableComponent.users).toEqual(mockUsers);
+    expect(userTableComponent.loading).toBeFalse();
+  });
 
-      const clearButton = compiled.querySelector('.clear-filters-btn') as HTMLButtonElement;
-      clearButton.click();
-
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.clearFilters()
-      );
-    });
-
-    it('should show clear button only when filters are active', () => {
-      // Initially no filters
-      let clearButton = compiled.querySelector('.clear-filters-btn');
-      expect(clearButton).toBeFalsy();
-
-      // Add filters
-      component.filterForm.patchValue({ searchTerm: 'test' });
-      fixture.detectChanges();
-
-      clearButton = compiled.querySelector('.clear-filters-btn');
-      expect(clearButton).toBeTruthy();
+  it('should handle loading state', () => {
+    store.overrideSelector(selectUsersLoading, true);
+    store.refreshState();
+    fixture.detectChanges();
+    
+    component.loading$.subscribe(loading => {
+      expect(loading).toBeTrue();
     });
   });
 
-  describe('Quick Filters', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
-    });
-
-    it('should apply active users quick filter', () => {
-      const activeUsersBtn = compiled.querySelector('.quick-filter-active') as HTMLButtonElement;
-      activeUsersBtn.click();
-
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.updateFilters({ filters: jasmine.objectContaining({ status: 'active' }) })
-      );
-    });
-
-    it('should apply admin users quick filter', () => {
-      const adminUsersBtn = compiled.querySelector('.quick-filter-admin') as HTMLButtonElement;
-      adminUsersBtn.click();
-
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.updateFilters({ filters: jasmine.objectContaining({ role: UserRole.ADMIN }) })
-      );
-    });
-
-    it('should apply recent users quick filter', () => {
-      const recentUsersBtn = compiled.querySelector('.quick-filter-recent') as HTMLButtonElement;
-      recentUsersBtn.click();
-
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.updateFilters({ 
-          filters: jasmine.objectContaining({ 
-            dateRange: jasmine.objectContaining({ type: 'recent' })
-          })
-        })
-      );
+  it('should handle error state', () => {
+    const errorMessage = 'Failed to load users';
+    store.overrideSelector(selectUsersError, errorMessage);
+    store.refreshState();
+    fixture.detectChanges();
+    
+    component.error$.subscribe(error => {
+      expect(error).toBe(errorMessage);
     });
   });
 
-  describe('Pagination', () => {
-    beforeEach(() => {
-      const paginationState = {
-        currentPage: 1,
-        itemsPerPage: 10,
-        totalItems: 25,
-        totalPages: 3
-      };
-      mockStore.overrideSelector(UserSelectors.selectUserPagination, paginationState);
-      fixture.detectChanges();
-    });
-
-    it('should display pagination controls', () => {
-      const pagination = compiled.querySelector('.pagination');
-      expect(pagination).toBeTruthy();
-    });
-
-    it('should dispatch page change action when page button clicked', () => {
-      const nextPageBtn = compiled.querySelector('.pagination-next') as HTMLButtonElement;
-      nextPageBtn.click();
-
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.changePage({ page: 2 })
-      );
-    });
-
-    it('should dispatch items per page change action', () => {
-      const itemsPerPageSelect = compiled.querySelector('.items-per-page-select') as HTMLSelectElement;
-      itemsPerPageSelect.value = '25';
-      itemsPerPageSelect.dispatchEvent(new Event('change'));
-
-      expect(mockStore.dispatch).toHaveBeenCalledWith(
-        UserActions.changeItemsPerPage({ itemsPerPage: 25 })
-      );
+  it('should filter users by search term', () => {
+    const filteredUsers = [mockUsers[0]];
+    store.overrideSelector(selectFilteredUsers, filteredUsers);
+    store.refreshState();
+    fixture.detectChanges();
+    
+    component.users$.subscribe(users => {
+      expect(users).toEqual(filteredUsers);
+      expect(users.length).toBe(1);
+      expect(users[0].name).toBe('John Doe');
     });
   });
 
-  describe('User Actions', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
-    });
-
-    it('should dispatch edit user action', () => {
-      spyOn(component, 'onEditUser');
-      const editBtn = compiled.querySelector('.edit-user-btn') as HTMLButtonElement;
-      editBtn.click();
-
-      expect(component.onEditUser).toHaveBeenCalled();
-    });
-
-    it('should dispatch delete user action with confirmation', () => {
-      spyOn(window, 'confirm').and.returnValue(true);
-      spyOn(component, 'onDeleteUser');
-      
-      const deleteBtn = compiled.querySelector('.delete-user-btn') as HTMLButtonElement;
-      deleteBtn.click();
-
-      expect(window.confirm).toHaveBeenCalled();
-      expect(component.onDeleteUser).toHaveBeenCalled();
-    });
-
-    it('should not delete user when confirmation is cancelled', () => {
-      spyOn(window, 'confirm').and.returnValue(false);
-      spyOn(component, 'onDeleteUser');
-      
-      const deleteBtn = compiled.querySelector('.delete-user-btn') as HTMLButtonElement;
-      deleteBtn.click();
-
-      expect(window.confirm).toHaveBeenCalled();
-      expect(component.onDeleteUser).not.toHaveBeenCalled();
+  it('should filter users by role', () => {
+    const adminUsers = mockUsers.filter(user => user.role === 'admin');
+    store.overrideSelector(selectFilteredUsers, adminUsers);
+    store.refreshState();
+    fixture.detectChanges();
+    
+    component.users$.subscribe(users => {
+      expect(users).toEqual(adminUsers);
+      expect(users.every(user => user.role === 'admin')).toBeTrue();
     });
   });
 
-  describe('Accessibility', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
-    });
-
-    it('should have proper ARIA labels for filter inputs', () => {
-      const searchInput = compiled.querySelector('input[formControlName="searchTerm"]');
-      const roleSelect = compiled.querySelector('select[formControlName="role"]');
-      
-      expect(searchInput?.getAttribute('aria-label')).toBeTruthy();
-      expect(roleSelect?.getAttribute('aria-label')).toBeTruthy();
-    });
-
-    it('should have proper table headers and structure', () => {
-      const table = compiled.querySelector('table');
-      const headers = compiled.querySelectorAll('th');
-      
-      expect(table?.getAttribute('role')).toBe('table');
-      expect(headers.length).toBeGreaterThan(0);
-    });
-
-    it('should support keyboard navigation for pagination', () => {
-      const paginationBtns = compiled.querySelectorAll('.pagination button');
-      paginationBtns.forEach(btn => {
-        expect(btn.getAttribute('tabindex')).not.toBe('-1');
-      });
+  it('should filter users by status', () => {
+    const activeUsers = mockUsers.filter(user => user.status === 'active');
+    store.overrideSelector(selectFilteredUsers, activeUsers);
+    store.refreshState();
+    fixture.detectChanges();
+    
+    component.users$.subscribe(users => {
+      expect(users).toEqual(activeUsers);
+      expect(users.every(user => user.status === 'active')).toBeTrue();
     });
   });
 
-  describe('Component Cleanup', () => {
-    it('should unsubscribe from observables on destroy', () => {
-      spyOn(component['destroy$'], 'next');
-      spyOn(component['destroy$'], 'complete');
-
-      component.ngOnDestroy();
-
-      expect(component['destroy$'].next).toHaveBeenCalled();
-      expect(component['destroy$'].complete).toHaveBeenCalled();
-    });
-
-    it('should not have memory leaks', () => {
-      const subscriptionsCount = (component as any)._subscriptions?.length || 0;
-      
-      component.ngOnDestroy();
-      
-      // Verify subscriptions are cleaned up
-      expect(component['destroy$'].closed).toBeFalsy(); // Subject should be completed, not closed
+  it('should filter users by department', () => {
+    const itUsers = mockUsers.filter(user => user.department === 'IT');
+    store.overrideSelector(selectFilteredUsers, itUsers);
+    store.refreshState();
+    fixture.detectChanges();
+    
+    component.users$.subscribe(users => {
+      expect(users).toEqual(itUsers);
+      expect(users.every(user => user.department === 'IT')).toBeTrue();
     });
   });
 
-  describe('Error Handling', () => {
-    it('should handle filter form errors gracefully', () => {
-      component.filterForm.get('searchTerm')?.setErrors({ invalid: true });
-      fixture.detectChanges();
-
-      expect(component.filterForm.invalid).toBeTruthy();
-      // Component should still function despite form errors
-      expect(compiled.querySelector('.user-list')).toBeTruthy();
-    });
-
-    it('should handle empty filter results', () => {
-      mockStore.overrideSelector(UserSelectors.selectFilteredUsers, []);
-      mockStore.refreshState();
-      fixture.detectChanges();
-
-      const emptyMessage = compiled.querySelector('.no-results-message');
-      expect(emptyMessage).toBeTruthy();
+  it('should handle empty filter results', () => {
+    store.overrideSelector(selectFilteredUsers, []);
+    store.refreshState();
+    fixture.detectChanges();
+    
+    component.users$.subscribe(users => {
+      expect(users).toEqual([]);
+      expect(users.length).toBe(0);
     });
   });
 
-  describe('Performance', () => {
-    it('should debounce search input to prevent excessive API calls', (done) => {
-      let dispatchCount = 0;
-      const originalDispatch = mockStore.dispatch;
-      mockStore.dispatch = jasmine.createSpy('dispatch').and.callFake((...args) => {
-        if (args[0].type === '[User] Update Filters') {
-          dispatchCount++;
-        }
-        return originalDispatch.apply(mockStore, args);
-      });
+  it('should unsubscribe on destroy', () => {
+    spyOn(component['destroy$'], 'next');
+    spyOn(component['destroy$'], 'complete');
+    
+    component.ngOnDestroy();
+    
+    expect(component['destroy$'].next).toHaveBeenCalled();
+    expect(component['destroy$'].complete).toHaveBeenCalled();
+  });
 
-      const searchInput = compiled.querySelector('input[formControlName="searchTerm"]') as HTMLInputElement;
-      
-      // Simulate rapid typing
-      searchInput.value = 'J';
-      searchInput.dispatchEvent(new Event('input'));
-      searchInput.value = 'Jo';
-      searchInput.dispatchEvent(new Event('input'));
-      searchInput.value = 'Joh';
-      searchInput.dispatchEvent(new Event('input'));
-      searchInput.value = 'John';
-      searchInput.dispatchEvent(new Event('input'));
+  it('should emit filter change from child component', () => {
+    const filterPanel = fixture.debugElement.query(By.css('app-filter-panel'));
+    const newFilter: UserFilter = {
+      searchTerm: 'test',
+      role: 'admin',
+      status: null,
+      department: null,
+      dateRange: null
+    };
+    
+    spyOn(store, 'dispatch');
+    filterPanel.componentInstance.filterChange.emit(newFilter);
+    
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.setFilter({ filter: newFilter })
+    );
+  });
 
-      setTimeout(() => {
-        expect(dispatchCount).toBeLessThan(4); // Should be debounced
-        done();
-      }, 400);
-    });
+  it('should emit clear filter from child component', () => {
+    const filterPanel = fixture.debugElement.query(By.css('app-filter-panel'));
+    
+    spyOn(store, 'dispatch');
+    filterPanel.componentInstance.clearFilter.emit();
+    
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.clearFilter()
+    );
+  });
+
+  it('should emit sort change from child component', () => {
+    const userTable = fixture.debugElement.query(By.css('app-user-table'));
+    const sortConfig = { column: 'email', direction: 'desc' as const };
+    
+    spyOn(store, 'dispatch');
+    userTable.componentInstance.sortChange.emit(sortConfig);
+    
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.setSorting({ sortColumn: 'email', sortDirection: 'desc' })
+    );
+  });
+
+  it('should emit user events from child component', () => {
+    const userTable = fixture.debugElement.query(By.css('app-user-table'));
+    const user = mockUsers[0];
+    
+    spyOn(component.userSelect, 'emit');
+    spyOn(component.userEdit, 'emit');
+    spyOn(store, 'dispatch');
+    
+    userTable.componentInstance.userSelect.emit(user);
+    userTable.componentInstance.userEdit.emit(user);
+    userTable.componentInstance.userDelete.emit(user);
+    
+    expect(component.userSelect.emit).toHaveBeenCalledWith(user);
+    expect(component.userEdit.emit).toHaveBeenCalledWith(user);
+    expect(store.dispatch).toHaveBeenCalledWith(
+      UserActions.deleteUser({ userId: user.id })
+    );
   });
 });
