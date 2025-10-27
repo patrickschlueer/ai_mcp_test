@@ -272,7 +272,13 @@ class ReviewAgent {
     await this.sendEvent({
       type: 'reviewing',
       message: `Reviewing PR #${pr.number} (Evidence-Based)`,
-      details: pr.title,
+      details: JSON.stringify({
+        prNumber: pr.number,
+        prTitle: pr.title,
+        filesChanged: pr.files ? pr.files.length : 0,
+        additions: pr.files ? pr.files.reduce((sum, f) => sum + (f.additions || 0), 0) : 0,
+        deletions: pr.files ? pr.files.reduce((sum, f) => sum + (f.deletions || 0), 0) : 0
+      }, null, 2),
       activity: `👀 Reviewing PR #${pr.number}`
     });
 
@@ -599,7 +605,14 @@ Antworte mit JSON (ohne Code-Block-Markierungen):
       await this.sendEvent({
         type: 'review_posted',
         message: `Review posted for PR #${pr.number}`,
-        details: review.status,
+        details: JSON.stringify({
+          status: review.status,
+          recommendation: review.recommendation,
+          criticalIssues: review.critical ? review.critical.length : 0,
+          majorIssues: review.major ? review.major.length : 0,
+          minorIssues: review.minor ? review.minor.length : 0,
+          summary: review.summary
+        }, null, 2),
         activity: `✍️ Posted review`
       });
       
@@ -624,7 +637,11 @@ Antworte mit JSON (ohne Code-Block-Markierungen):
       await this.sendEvent({
         type: 'pr_approved',
         message: `PR #${pr.number} approved`,
-        details: pr.title,
+        details: JSON.stringify({
+          prNumber: pr.number,
+          prTitle: pr.title,
+          prUrl: pr.url || 'N/A'
+        }, null, 2),
         activity: `✅ Approved PR`
       });
       
@@ -680,7 +697,14 @@ Antworte mit JSON (ohne Code-Block-Markierungen):
         await this.sendEvent({
           type: 'changes_requested',
           message: `Changes requested for ${ticketKey}`,
-          details: `PR #${pr.number} needs fixes`,
+          details: JSON.stringify({
+            ticketKey,
+            prNumber: pr.number,
+            prUrl: pr.url,
+            reason: 'PR needs fixes',
+            criticalIssues: review.critical ? review.critical.length : 0,
+            majorIssues: review.major ? review.major.length : 0
+          }, null, 2),
           activity: `⚠️ Changes requested for ${ticketKey}`
         });
       } else if (review.recommendation === 'needs_discussion') {
@@ -696,7 +720,13 @@ Antworte mit JSON (ohne Code-Block-Markierungen):
         await this.sendEvent({
           type: 'discussion_requested',
           message: `Discussion points for ${ticketKey}`,
-          details: `PR #${pr.number} has discussion items`,
+          details: JSON.stringify({
+            ticketKey,
+            prNumber: pr.number,
+            prUrl: pr.url,
+            reason: 'PR has discussion items',
+            minorIssues: review.minor ? review.minor.length : 0
+          }, null, 2),
           activity: `💬 Discussion for ${ticketKey}`
         });
       } else if (review.recommendation === 'approve') {
@@ -712,7 +742,12 @@ Antworte mit JSON (ohne Code-Block-Markierungen):
         await this.sendEvent({
           type: 'pr_approved',
           message: `PR approved for ${ticketKey}`,
-          details: `PR #${pr.number} ready to merge`,
+          details: JSON.stringify({
+            ticketKey,
+            prNumber: pr.number,
+            prUrl: pr.url,
+            status: 'Ready to merge'
+          }, null, 2),
           activity: `✅ Approved ${ticketKey}`
         });
       }

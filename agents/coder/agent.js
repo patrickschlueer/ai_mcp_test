@@ -339,17 +339,25 @@ class CoderAgent {
             // 🔥 NEU: Parse Evidence-Based Issues (strukturiert!)
             const requestedChanges = [];
             
-            // Extrahiere Critical Issues
-            const criticalSection = latestReview.body.match(/## 🚨 Critical Issues[\s\S]*?(?=## |---)/);
+            console.log(`   📄 Full review body length: ${latestReview.body.length} chars`);
+            console.log(`   📄 First 1000 chars of review body:`);
+            console.log(latestReview.body.substring(0, 1000));
+            console.log(`   📄 ...`);
+            
+            // Extrahiere Critical Issues - VERBESSERTES Pattern das alle Sub-Items erfasst
+            const criticalSection = latestReview.body.match(/## 🚨 Critical Issues[\s\S]*?(?=\n## (?:⚠️|ℹ️|✅)|\n---|$)/);            
             if (criticalSection) {
-              console.log(`   ✅ Found Critical Issues section`);
+            console.log(`   ✅ Found Critical Issues section`);
+            console.log(`   📝 Section content (first 500 chars):`);
+            console.log(criticalSection[0].substring(0, 500));
+            console.log(`   📝 Section full length: ${criticalSection[0].length}`);
               const issues = this.parseEvidenceBasedIssues(criticalSection[0], 'critical');
               requestedChanges.push(...issues);
               console.log(`   ✅ Extracted ${issues.length} critical issue(s)`);
             }
             
-            // Extrahiere Major Improvements
-            const majorSection = latestReview.body.match(/## ⚠️ Major Improvements[\s\S]*?(?=## |---)/);
+            // Extrahiere Major Improvements - VERBESSERTES Pattern
+            const majorSection = latestReview.body.match(/## ⚠️ Major Improvements[\s\S]*?(?=\n## (?:ℹ️|✅)|\n---|$)/);
             if (majorSection) {
               console.log(`   ✅ Found Major Improvements section`);
               const issues = this.parseEvidenceBasedIssues(majorSection[0], 'major');
@@ -393,8 +401,14 @@ class CoderAgent {
             reviewDecision: feedback.reviewDecision,
             issuesCount: feedback.requestedChanges.length,
             critical: feedback.requestedChanges.filter(i => i.severity === 'critical').length,
-            major: feedback.requestedChanges.filter(i => i.severity === 'major').length
-          }),
+            major: feedback.requestedChanges.filter(i => i.severity === 'major').length,
+            issues: feedback.requestedChanges.map(i => ({
+              severity: i.severity,
+              file: i.file,
+              line: i.line,
+              problem: i.problem
+            }))
+          }, null, 2),
           activity: `✅ Analyzed PR #${prNumber}`
         });
       }
@@ -421,42 +435,78 @@ class CoderAgent {
   
   /**
    * 🆕 Parse Evidence-Based Issues aus Review-Kommentar
+   * 
+   * 🔥 VERBESSERT: Robusterer Parser der mit verschiedenen Formaten umgehen kann
    */
   parseEvidenceBasedIssues(sectionText, severity) {
     const issues = [];
     
-    // Regex für Evidence-Based Format:
-    // **📍 File:** `path`
-    // **📏 Line:** 123
-    // **❌ Problem:** text
-    // **📋 Evidence:** ```code```
-    // **✅ Solution:** text
+    console.log(`   🔍 Parsing ${severity} issues from section...`);
+    console.log(`   📝 Section length: ${sectionText.length} chars`);
     
     // Finde alle Issue-Blöcke (beginnend mit ### und dann die strukturierten Felder)
     const issueBlocks = sectionText.split(/###\s*\d+\./);
     
-    for (const block of issueBlocks) {
+    console.log(`   📦 Found ${issueBlocks.length - 1} potential issue blocks`);
+    
+    for (let i = 0; i < issueBlocks.length; i++) {
+      const block = issueBlocks[i];
       if (block.trim().length === 0) continue;
       
-      // Extrahiere strukturierte Felder
-      const fileMatch = block.match(/\*\*📍 File:\*\*\s*`([^`]+)`/);
-      const lineMatch = block.match(/\*\*📏 Line:\*\*\s*([\d-]+)/);
-      const problemMatch = block.match(/\*\*❌ Problem:\*\*\s*([^\n]+)/);
-      const evidenceMatch = block.match(/\*\*📋 Evidence:\*\*\s*```([\s\S]*?)```/);
-      const solutionMatch = block.match(/\*\*✅ Solution:\*\*\s*([\s\S]*?)(?=\n\n|$)/);
+      console.log(`\n   🗒️ Processing block ${i}...`);
+      console.log(`   📝 First 200 chars: ${block.substring(0, 200)}...`);
       
+      // Extrahiere strukturierte Felder mit flexibleren Regex-Patterns
+      // File: Kann in verschiedenen Formaten sein
+      const fileMatch = block.match(/\*\*📍 File:\*\*\s*`([^`]+)`/) || 
+                        block.match(/\*\*📍 File:\*\*\s*([^\n]+)/) ||
+                        block.match(/File:\s*`([^`]+)`/) ||
+                        block.match(/File:\s*([^\n]+)/);
+      
+      // Line: Kann Zahl oder Bereich sein
+      const lineMatch = block.match(/\*\*📏 Line:\*\*\s*([\d-]+)/) ||
+                        block.match(/Line:\s*([\d-]+)/);
+      
+      // Problem: Text nach dem Problem-Marker
+      const problemMatch = block.match(/\*\*❌ Problem:\*\*\s*([^\n]+)/) ||
+                           block.match(/Problem:\s*([^\n]+)/);
+      
+      // Evidence: Kann mit oder ohne Backticks sein
+      const evidenceMatch = block.match(/\*\*📋 Evidence:\*\*\s*```([\s\S]*?)```/) ||
+                            block.match(/\*\*📋 Evidence:\*\*\s*([\s\S]*?)(?=\*\*✅|$)/) ||
+                            block.match(/Evidence:\s*```([\s\S]*?)```/) ||
+                            block.match(/Evidence:\s*([\s\S]*?)(?=Solution:|$)/);
+      
+      // Solution: Alles nach dem Solution-Marker bis zum nächsten Block oder Ende
+      const solutionMatch = block.match(/\*\*✅ Solution:\*\*\s*([\s\S]*?)(?=\n\n|$)/) ||
+                            block.match(/Solution:\s*([\s\S]*?)(?=\n\n|$)/);
+      
+      // Debug-Ausgabe
+      console.log(`      File: ${fileMatch ? fileMatch[1].trim() : 'NOT FOUND'}`);
+      console.log(`      Line: ${lineMatch ? lineMatch[1] : 'NOT FOUND'}`);
+      console.log(`      Problem: ${problemMatch ? problemMatch[1].trim().substring(0, 50) : 'NOT FOUND'}...`);
+      console.log(`      Evidence: ${evidenceMatch ? 'Found' : 'NOT FOUND'}`);
+      console.log(`      Solution: ${solutionMatch ? solutionMatch[1].trim().substring(0, 50) : 'NOT FOUND'}...`);
+      
+      // Validiere dass wir mindestens File, Problem und Solution haben
       if (fileMatch && problemMatch && solutionMatch) {
-        issues.push({
+        const issue = {
           severity: severity,
-          file: fileMatch[1],
-          line: lineMatch ? lineMatch[1] : 'unknown',
+          file: fileMatch[1].trim(),
+          line: lineMatch ? lineMatch[1].trim() : 'unknown',
           problem: problemMatch[1].trim(),
           evidence: evidenceMatch ? evidenceMatch[1].trim() : '',
           solution: solutionMatch[1].trim()
-        });
+        };
+        
+        issues.push(issue);
+        console.log(`      ✅ Issue extracted successfully!`);
+      } else {
+        console.log(`      ⚠️  Skipping block - missing required fields`);
       }
     }
     
+    console.log(`\n   🎯 Final result: ${issues.length} issues extracted`);
     return issues;
   }
 
@@ -626,29 +676,50 @@ Antworte NUR mit JSON Array:
 
   /**
    * SCHRITT 1: Plane welche Files geändert werden müssen (Evidence-Based)
+   * 
+   * 🔥 KRITISCH: Bei Rework NUR die vom Reviewer genannten Files ändern!
    */
   async planImplementation(ticket, context, prFeedback = null) {
     console.log(`\n${this.emoji} Planning implementation...`);
     
-    // 🔥 NEU: Füge PR-Feedback zum Prompt hinzu wenn vorhanden (STRUCTURED FORMAT!)
-    const feedbackSection = prFeedback && prFeedback.requestedChanges.length > 0 
-      ? `\n=== REVIEWER FEEDBACK (EVIDENCE-BASED - MUST ADDRESS!) ===
-**Review Status:** ${prFeedback.reviewDecision}
-
-**Requested Changes (${prFeedback.requestedChanges.length} issues):**
-
-${prFeedback.requestedChanges.map((issue, i) => `
-${i + 1}. [${issue.severity.toUpperCase()}] ${issue.file}:${issue.line}
-   Problem: ${issue.problem}
-   ${issue.evidence ? `Evidence: ${issue.evidence.substring(0, 200)}${issue.evidence.length > 200 ? '...' : ''}\n   ` : ''}Solution: ${issue.solution}
-`).join('')}
-
-⚠️ KRITISCH: Diese Änderungen müssen EXAKT wie vom Reviewer beschrieben umgesetzt werden!
-- Der Reviewer hat KONKRETE Dateien, Zeilen und Lösungen angegeben
-- Implementiere GENAU diese Lösungen, nicht deine eigenen Ideen
-- Fokussiere dich NUR auf die genannten Dateien und Probleme
-`
-      : ''
+    // 🔥 NEU: Bei Rework - STRIKTE Fokussierung auf Reviewer-Feedback!
+    if (prFeedback && prFeedback.requestedChanges.length > 0) {
+      console.log(`\n⚠️  REWORK MODE: Fokussiere NUR auf Reviewer-Feedback!`);
+      console.log(`   📝 ${prFeedback.requestedChanges.length} Issues zu fixen`);
+      
+      // Extrahiere alle betroffenen Files aus den Issues
+      const affectedFiles = [...new Set(prFeedback.requestedChanges.map(i => i.file))];
+      
+      console.log(`   📁 Betroffene Files: ${affectedFiles.length}`);
+      affectedFiles.forEach(f => console.log(`      - ${f}`));
+      
+      // Erstelle Plan DIREKT aus den Issues - KEIN Claude-Call nötig!
+      const filesToModify = affectedFiles.map(file => {
+        const fileIssues = prFeedback.requestedChanges.filter(i => i.file === file);
+        
+        // Kombiniere alle Solutions für dieses File
+        const combinedReason = fileIssues.map((issue, idx) => 
+          `[${issue.severity.toUpperCase()}] Line ${issue.line}: ${issue.problem} - ${issue.solution}`
+        ).join('\n');
+        
+        return {
+          path: file,
+          action: 'update',
+          reason: combinedReason,
+          reviewerIssues: fileIssues // 🔥 NEU: Hänge Original-Issues an!
+        };
+      });
+      
+      const plan = {
+        filesToModify,
+        implementationStrategy: `REWORK: Fixe ${prFeedback.requestedChanges.length} reviewer issues in ${affectedFiles.length} file(s). NUR diese Files ändern, GENAU wie vom Reviewer beschrieben!`
+      };
+      
+      console.log(`   ✅ Plan created: ${plan.filesToModify.length} file(s)`);
+      console.log(`   📝 Strategy: ${plan.implementationStrategy}`);
+      
+      return plan;
+    }
     
     const prompt = `Du bist ein Senior Full-Stack Developer. Analysiere die Anforderungen und erstelle einen Implementierungsplan.
 ${feedbackSection ? '\n⚠️ ACHTUNG: Dies ist ein REWORK! Der Reviewer hat Änderungen angefordert. Fokussiere dich NUR auf die geforderten Änderungen!' : ''}
@@ -837,22 +908,85 @@ Antworte NUR mit dem Code (KEIN JSON, KEIN Markdown):`;
 
   /**
    * SCHRITT 2: Implementiere EINE einzelne Datei (mit Retry-Logik)
+   * 
+   * 🔥 VERBESSERT: Berücksichtigt Reviewer-Issues wenn vorhanden
    */
   async implementSingleFile(fileToModify, ticket, context, retryCount = 0) {
     console.log(`\n${this.emoji} Implementing ${fileToModify.path}...`);
     
+    // 🔥 NEU: Prüfe ob wir Reviewer-Issues haben (REWORK MODE) - MUSS ZUERST SEIN!
+    const hasReviewerIssues = fileToModify.reviewerIssues && fileToModify.reviewerIssues.length > 0;
+    
     await this.sendEvent({
       type: 'coding',
       message: `Working on ${fileToModify.path}`,
-      details: fileToModify.reason,
-      activity: `⚙️ Coding ${fileToModify.path}`
+      details: JSON.stringify({
+        path: fileToModify.path,
+        action: fileToModify.action,
+        reason: fileToModify.reason,
+        hasReviewerIssues,
+        reviewerIssuesCount: hasReviewerIssues ? fileToModify.reviewerIssues.length : 0
+      }, null, 2),
+      activity: `⚙️ Coding ${fileToModify.path.split('/').pop()}`
     });
 
     // Hole den aktuellen File-Content falls vorhanden
     const existingFile = context.files.find(f => f.path === fileToModify.path);
     const existingContent = existingFile ? existingFile.content : '';
+    
+    if (hasReviewerIssues) {
+      console.log(`   🔥 REWORK MODE: ${fileToModify.reviewerIssues.length} reviewer issue(s) für diese Datei`);
+      fileToModify.reviewerIssues.forEach((issue, idx) => {
+        console.log(`      ${idx + 1}. Line ${issue.line}: ${issue.problem.substring(0, 60)}...`);
+      });
+    }
 
-    const prompt = `Du bist ein Senior Full-Stack Developer. Implementiere die Änderungen für DIESE EINE Datei.
+    const prompt = hasReviewerIssues ? 
+      // 🔥 REWORK MODE: Fokussierter Prompt mit exakten Reviewer-Anweisungen
+      `Du bist ein Senior Full-Stack Developer. Fixe die EXAKTEN Issues die der Reviewer gefunden hat.
+
+⚠️ KRITISCH: Dies ist ein REWORK! Der Code-Reviewer hat spezifische Probleme gefunden die du JETZT fixen musst.
+
+=== FILE ZU ÄNDERN ===
+Path: ${fileToModify.path}
+
+=== AKTUELLER CONTENT ===
+${existingContent || '(Datei nicht gefunden)'}
+
+=== REVIEWER ISSUES (${fileToModify.reviewerIssues.length}) ===
+${fileToModify.reviewerIssues.map((issue, idx) => `
+${idx + 1}. [${issue.severity.toUpperCase()}] Line ${issue.line}
+   ❌ Problem: ${issue.problem}
+   ${issue.evidence ? `📋 Evidence (aktueller Code):\n${issue.evidence}\n` : ''}
+   ✅ Solution (wie zu fixen): ${issue.solution}
+`).join('\n')}
+
+=== AUFGABE ===
+Fixe GENAU diese ${fileToModify.reviewerIssues.length} Issue(s) im Code.
+
+**KRITISCHE REGELN:**
+1. Ändere NUR was der Reviewer explizit erwähnt hat
+2. Implementiere die Solutions EXAKT wie beschrieben
+3. Verändere NICHTS anderes im File
+4. Behalte den Rest des Codes UNVERÄNDERT
+5. Achte auf die Line-Numbers die der Reviewer genannt hat
+
+**FORMAT:**
+Gib den KOMPLETTEN neuen File-Content zurück (mit den Fixes).
+
+Antworte NUR mit JSON:
+
+\`\`\`json
+{
+  "content": "Der KOMPLETTE File-Content hier (mit den Reviewer-Fixes)",
+  "changes": "Kurze Liste was genau geändert wurde"
+}
+\`\`\`
+
+**WICHTIG**: Gib den VOLLSTÄNDIGEN File-Content zurück, nicht nur die geänderten Zeilen!`
+      :
+      // Original Prompt für Fresh Implementation
+      `Du bist ein Senior Full-Stack Developer. Implementiere die Änderungen für DIESE EINE Datei.
 
 === TICKET ===
 ${ticket.key}: ${ticket.summary}
@@ -1091,7 +1225,11 @@ Gib NUR den neuen File-Content zurück. Kein JSON, nur reiner Code.`;
         await this.sendEvent({
           type: 'file_modified',
           message: `${change.action}: ${change.path}`,
-          details: change.reason,
+          details: JSON.stringify({
+            path: change.path,
+            action: change.action,
+            reason: change.reason
+          }, null, 2),
           activity: `✏️ Modifying files`
         });
 
@@ -1172,8 +1310,10 @@ _Created by ${this.emoji} ${this.name}_`;
           message: `PR created for ${ticket.key}`,
           details: JSON.stringify({
             prUrl: result.pr.url,
-            prNumber: result.pr.number
-          }),
+            prNumber: result.pr.number,
+            prTitle: result.pr.title,
+            branch: branchName
+          }, null, 2),
           activity: `✅ PR Ready`
         });
 
