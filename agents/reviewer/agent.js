@@ -259,32 +259,88 @@ class ReviewAgent {
   }
 
   /**
-   * Review den Code
+   * Review den Code mit EVIDENCE-BASED POLICY
+   * 
+   * 🎯 WICHTIG: Jedes Issue MUSS enthalten:
+   * 1. Exakte Datei + Zeilennummer
+   * 2. Code-Snippet das das Problem zeigt
+   * 3. Konkrete Lösung wie es zu fixen ist
    */
   async reviewCode(pr) {
-    console.log(`\n${this.emoji} Reviewing code...`);
+    console.log(`\n${this.emoji} Reviewing code with EVIDENCE-BASED POLICY...`);
     
     await this.sendEvent({
       type: 'reviewing',
-      message: `Reviewing PR #${pr.number}`,
+      message: `Reviewing PR #${pr.number} (Evidence-Based)`,
       details: pr.title,
       activity: `👀 Reviewing PR #${pr.number}`
     });
 
-    // Erstelle File-Changes Context
-    let changesContext = '=== CODE CHANGES ===\n\n';
+    // Erstelle File-Changes Context mit Zeilennummern
+    let changesContext = '=== CODE CHANGES (with line numbers) ===\n\n';
     
     if (pr.files && pr.files.length > 0) {
       for (const file of pr.files) {
-        changesContext += `━━━ ${file.filename} (${file.status}) ━━━\n`;
-        changesContext += `Additions: ${file.additions}, Deletions: ${file.deletions}\n`;
+        changesContext += `━━━ FILE: ${file.filename} (${file.status}) ━━━\n`;
+        changesContext += `Changes: +${file.additions} -${file.deletions}\n`;
         if (file.patch) {
-          changesContext += `\n${file.patch}\n\n`;
+          // Parse patch und füge Zeilennummern hinzu
+          const lines = file.patch.split('\n');
+          let currentLine = 0;
+          
+          for (const line of lines) {
+            // Extrahiere Zeilennummer aus patch header
+            const lineMatch = line.match(/@@ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@/);
+            if (lineMatch) {
+              currentLine = parseInt(lineMatch[3]);
+              changesContext += `${line}\n`;
+            } else if (line.startsWith('+') && !line.startsWith('+++')) {
+              changesContext += `Line ${currentLine}: ${line}\n`;
+              currentLine++;
+            } else if (line.startsWith('-') && !line.startsWith('---')) {
+              changesContext += `${line}\n`;
+            } else {
+              changesContext += `Line ${currentLine}: ${line}\n`;
+              currentLine++;
+            }
+          }
         }
+        changesContext += `\n`;
       }
     }
 
-    const prompt = `Du bist ein Senior Code Reviewer. Reviewe diesen Pull Request.
+    const prompt = `Du bist ein Senior Code Reviewer mit EVIDENCE-BASED REVIEW POLICY.
+
+⚠️ KRITISCHE REGEL: JEDES Issue das du findest MUSS folgendes Format haben:
+
+**Format für Issues:**
+(Beispiel)
+📍 File: [exakte Datei]
+📏 Line: [Zeilennummer oder Zeilenbereich]
+❌ Problem: [Was ist falsch]
+📋 Evidence: [Code-Snippet das das Problem zeigt]
+✅ Solution: [Konkrete Lösung wie es zu fixen ist]
+
+**Beispiel GUTES Issue:**
+📍 File: src/app/user/user.component.ts
+📏 Line: 45-48
+❌ Problem: Error handling fehlt bei API Call
+📋 Evidence:
+this.userService.getUser(id).subscribe(user => {
+  this.user = user;
+});
+✅ Solution: Füge error handler hinzu:
+this.userService.getUser(id).subscribe({
+  next: (user) => this.user = user,
+  error: (err) => console.error('Failed to load user:', err)
+});
+
+**Beispiel SCHLECHTES Issue (zu vage):**
+❌ "Fehlende Error-Handling" → NICHT ERLAUBT!
+❌ "Code-Stil inkonsistent" → NICHT ERLAUBT!
+❌ "Performance-Probleme" → NICHT ERLAUBT!
+
+Du bist ein Senior Code Reviewer. Reviewe diesen Pull Request.
 
 === PULL REQUEST ===
 Title: ${pr.title}
@@ -375,19 +431,50 @@ Du sollst **NICHT ZU STRENG** sein! Review nach folgenden Kriterien:
 
 === AUFGABE ===
 
-Reviewe den Code und gib konstruktives Feedback. Antworte mit JSON:
+Reviewe den Code und gib PRÄZISES, UMSETZBARES Feedback. 
 
-\`\`\`json
+⚠️ WICHTIG: Jedes Issue MUSS das Evidence-Based Format verwenden!
+
+Antworte mit JSON (ohne Code-Block-Markierungen):
+
 {
   "status": "approve" | "request_changes" | "comment",
   "summary": "Kurze Zusammenfassung des Reviews",
-  "critical": ["Liste kritischer Probleme (wenn vorhanden)"],
-  "major": ["Liste wichtiger Verbesserungen (wenn vorhanden)"],
-  "minor": ["Liste kleinerer Anmerkungen (wenn vorhanden)"],
-  "good": ["Liste positiver Punkte"],
+  "critical": [
+    {
+      "file": "exakte/datei/path.ts",
+      "line": "45-48" oder "45",
+      "problem": "Was ist falsch",
+      "evidence": "Code-Snippet das Problem zeigt",
+      "solution": "Konkrete Lösung"
+    }
+  ],
+  "major": [
+    {
+      "file": "exakte/datei/path.ts",
+      "line": "23",
+      "problem": "Was sollte verbessert werden",
+      "evidence": "Code-Snippet",
+      "solution": "Vorgeschlagene Verbesserung"
+    }
+  ],
+  "minor": [
+    {
+      "file": "datei.ts",
+      "line": "10",
+      "problem": "Kleine Anmerkung",
+      "evidence": "Code",
+      "solution": "Optional: Verbesserungsvorschlag"
+    }
+  ],
+  "good": ["Liste positiver Punkte - HIER kannst du allgemein sein"],
   "recommendation": "approve" | "needs_discussion" | "needs_fixes"
 }
-\`\`\`
+
+**KRITISCH**: 
+- JEDES critical/major/minor Issue MUSS ein Objekt mit file, line, problem, evidence, solution sein!
+- KEINE vagen Strings wie "Error handling fehlt" - immer KONKRET mit Datei + Zeile!
+- Der Coder soll EXAKT wissen: WO, WAS, WIE fixen!
 
 **Status:**
 - "approve": Keine kritischen oder major Issues, kann approved werden
@@ -424,34 +511,59 @@ Reviewe den Code und gib konstruktives Feedback. Antworte mit JSON:
   }
 
   /**
-   * Poste Review-Kommentar im PR
+   * Poste Review-Kommentar im PR (mit Evidence-Based Format)
    */
   async postReviewComment(pr, review, iteration = 1) {
     console.log(`\n${this.emoji} Posting review comment...`);
     
-    let comment = `${this.emoji} **Code Review - Iteration ${iteration}**\n\n`;
+    let comment = `${this.emoji} **Code Review - Iteration ${iteration}** (Evidence-Based)\n\n`;
     comment += `${review.summary}\n\n`;
     
+    // Helper function für strukturierte Issues
+    const formatIssue = (issue) => {
+      if (typeof issue === 'string') {
+        // Fallback für alte Format
+        return `- ${issue}\n`;
+      }
+      
+      // Neues Evidence-Based Format
+      let formatted = `\n**📍 File:** \`${issue.file}\`\n`;
+      formatted += `**📏 Line:** ${issue.line}\n`;
+      formatted += `**❌ Problem:** ${issue.problem}\n`;
+      
+      if (issue.evidence) {
+        formatted += `**📋 Evidence:**\n\`\`\`\n${issue.evidence}\n\`\`\`\n`;
+      }
+      
+      formatted += `**✅ Solution:** ${issue.solution}\n`;
+      return formatted;
+    };
+    
     if (review.critical && review.critical.length > 0) {
-      comment += `## 🚨 Critical Issues\n`;
-      review.critical.forEach(issue => {
-        comment += `- ${issue}\n`;
+      comment += `## 🚨 Critical Issues (${review.critical.length})\n`;
+      comment += `⚠️ These MUST be fixed before approval!\n`;
+      review.critical.forEach((issue, i) => {
+        comment += `\n### ${i + 1}. ${typeof issue === 'object' ? issue.problem : issue}\n`;
+        comment += formatIssue(issue);
       });
       comment += `\n`;
     }
     
     if (review.major && review.major.length > 0) {
-      comment += `## ⚠️ Major Improvements\n`;
-      review.major.forEach(issue => {
-        comment += `- ${issue}\n`;
+      comment += `## ⚠️ Major Improvements (${review.major.length})\n`;
+      comment += `These should be addressed for code quality.\n`;
+      review.major.forEach((issue, i) => {
+        comment += `\n### ${i + 1}. ${typeof issue === 'object' ? issue.problem : issue}\n`;
+        comment += formatIssue(issue);
       });
       comment += `\n`;
     }
     
     if (review.minor && review.minor.length > 0) {
-      comment += `## ℹ️ Minor Notes\n`;
-      review.minor.forEach(issue => {
-        comment += `- ${issue}\n`;
+      comment += `## ℹ️ Minor Notes (${review.minor.length})\n`;
+      review.minor.forEach((issue, i) => {
+        comment += `\n### ${i + 1}. ${typeof issue === 'object' ? issue.problem : issue}\n`;
+        comment += formatIssue(issue);
       });
       comment += `\n`;
     }
@@ -469,7 +581,7 @@ Reviewe den Code und gib konstruktives Feedback. Antworte mit JSON:
     if (review.recommendation === 'approve') {
       comment += `✅ **Recommendation**: Ready to merge after human approval!\n`;
     } else if (review.recommendation === 'needs_fixes') {
-      comment += `⚠️ **Recommendation**: Please fix critical/major issues, then I'll review again.\n`;
+      comment += `⚠️ **Recommendation**: Please fix the issues above (focus on Critical first!), then I'll review again.\n`;
     } else {
       comment += `💬 **Recommendation**: Let's discuss these points, but overall looks good!\n`;
     }

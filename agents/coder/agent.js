@@ -278,15 +278,17 @@ class CoderAgent {
   }
 
   /**
-   * 🆕 Lese alle PR-Kommentare und Review-Feedback
+   * 🆕 Lese alle PR-Kommentare und Review-Feedback (Evidence-Based)
+   * 
+   * 🔥 NEU: Parst strukturiertes Evidence-Based Format vom Reviewer
    */
   async readPRFeedback(prNumber) {
-    console.log(`\n${this.emoji} Reading PR feedback...`);
+    console.log(`\n${this.emoji} Reading PR feedback (Evidence-Based)...`);
     
     await this.sendEvent({
       type: 'reading_pr',
       message: `Reading PR #${prNumber} feedback`,
-      details: 'Analyzing reviewer comments',
+      details: 'Analyzing evidence-based reviewer comments',
       activity: `📖 Reading PR #${prNumber}`
     });
     
@@ -299,11 +301,9 @@ class CoderAgent {
       const feedback = {
         comments: [],
         reviewDecision: null,
-        requestedChanges: [],
+        requestedChanges: [], // Array von strukturierten Issues
         summary: ''
       };
-
-      console.log('Hallo 2');
 
       if (commentsResult.success && commentsResult.comments) {
         feedback.comments = commentsResult.comments.map(c => ({
@@ -312,13 +312,10 @@ class CoderAgent {
           createdAt: c.createdAt
         }));
 
-        console.log('RES');
-        console.log(commentsResult);
-
         // Extrahiere Review-Entscheidung
-        // 🔥 FIXED: Suche nach den tatsächlichen Markern vom Review Agent
         const reviewComments = commentsResult.comments.filter(c => 
           c.body.includes('🔍 **Code Review') || 
+          c.body.includes('Evidence-Based') ||
           c.body.includes('🚨 Critical Issues') ||
           c.body.includes('⚠️ Major Improvements') ||
           c.body.includes('**Recommendation**:') ||
@@ -327,14 +324,10 @@ class CoderAgent {
         
         console.log(`   📋 Found ${reviewComments.length} review comment(s) from Review Agent`);
 
-        console.log('Hallo 1');
-        console.log(reviewComments);
-
         if (reviewComments.length > 0) {
           const latestReview = reviewComments[reviewComments.length - 1];
 
-          console.log('LATEST REVIEW:');
-          console.log(latestReview);
+          console.log(`\n   🔍 Parsing Evidence-Based Review...`);
           
           if (latestReview.body.includes('✅ APPROVED') || latestReview.body.includes('Ready to merge')) {
             feedback.reviewDecision = 'APPROVED';
@@ -343,95 +336,32 @@ class CoderAgent {
                      latestReview.body.includes('needs_fixes')) {
             feedback.reviewDecision = 'CHANGES_REQUESTED';
             
-            // 🔥 VERBESSERT: Parse das Reviewer-Format
+            // 🔥 NEU: Parse Evidence-Based Issues (strukturiert!)
             const requestedChanges = [];
             
-            console.log(`\n   🔍 DEBUG: Parsing review comment...`);
-            console.log(`   📏 Comment length: ${latestReview.body.length} chars`);
-            console.log(`   👤 Author: ${latestReview.author}`);
-            
-            // Debug: Zeige erste 500 Zeichen
-            console.log(`\n   📄 Comment preview (first 500 chars):`);
-            console.log(`   ${'-'.repeat(60)}`);
-            console.log(latestReview.body.substring(0, 500));
-            console.log(`   ${'-'.repeat(60)}`);
-            
-            // Debug: Suche nach allen ## Headers
-            const allHeaders = latestReview.body.match(/##[^\n]*/g);
-            if (allHeaders) {
-              console.log(`\n   📋 Found headers in comment:`);
-              allHeaders.forEach((header, i) => {
-                console.log(`      ${i + 1}. "${header}"`);
-              });
-            } else {
-              console.log(`\n   ⚠️  No ## headers found in comment!`);
-            }
-            
-            // Debug: Test verschiedene Regex-Patterns
-            console.log(`\n   🧪 Testing regex patterns...`);
-            
-            // Pattern 1: Mit ##
-            const pattern1 = /## 🚨 Critical Issues\s*([\s\S]*?)(?=\n##|\n---|$)/;
-            console.log(`   Pattern 1: /## 🚨 Critical Issues.../`);
-            console.log(`   Match: ${pattern1.test(latestReview.body) ? '✅ YES' : '❌ NO'}`);
-            
-            // Pattern 2: Ohne ##
-            const pattern2 = /🚨 Critical Issues\s*([\s\S]*?)(?=\n##|\n---|$)/;
-            console.log(`   Pattern 2: /🚨 Critical Issues.../`);
-            console.log(`   Match: ${pattern2.test(latestReview.body) ? '✅ YES' : '❌ NO'}`);
-            
-            // Pattern 3: Case insensitive
-            const pattern3 = /critical issues/i;
-            console.log(`   Pattern 3: /critical issues/i`);
-            console.log(`   Match: ${pattern3.test(latestReview.body) ? '✅ YES' : '❌ NO'}`);
-            
-            // Extrahiere Critical Issues (mit verbessertem Regex)
-            console.log(`\n   🎯 Attempting to extract Critical Issues...`);
-            const criticalMatch = latestReview.body.match(/## 🚨 Critical Issues\s*([\s\S]*?)(?=\n##|\n---|$)/);
-            if (criticalMatch) {
+            // Extrahiere Critical Issues
+            const criticalSection = latestReview.body.match(/## 🚨 Critical Issues[\s\S]*?(?=## |---)/);
+            if (criticalSection) {
               console.log(`   ✅ Found Critical Issues section`);
-              console.log(`   📦 Matched text length: ${criticalMatch[1].length} chars`);
-              console.log(`   📄 First 200 chars of match:`);
-              console.log(`   ${'-'.repeat(60)}`);
-              console.log(criticalMatch[1].substring(0, 200));
-              console.log(`   ${'-'.repeat(60)}`);
-              
-              const criticalText = criticalMatch[1].trim();
-              const criticalItems = criticalText
-                .split('\n')
-                .filter(line => line.trim().startsWith('-'))
-                .map(line => line.trim().substring(1).trim())
-                .filter(item => item.length > 0);
-              console.log(`   ✅ Extracted ${criticalItems.length} critical item(s)`);
-              requestedChanges.push(...criticalItems);
-            } else {
-              console.log(`   ❌ No Critical Issues section found`);
+              const issues = this.parseEvidenceBasedIssues(criticalSection[0], 'critical');
+              requestedChanges.push(...issues);
+              console.log(`   ✅ Extracted ${issues.length} critical issue(s)`);
             }
             
-            // Extrahiere Major Improvements (mit verbessertem Regex)
-            console.log(`\n   🎯 Attempting to extract Major Improvements...`);
-            const majorMatch = latestReview.body.match(/## ⚠️ Major Improvements\s*([\s\S]*?)(?=\n##|\n---|$)/);
-            if (majorMatch) {
+            // Extrahiere Major Improvements
+            const majorSection = latestReview.body.match(/## ⚠️ Major Improvements[\s\S]*?(?=## |---)/);
+            if (majorSection) {
               console.log(`   ✅ Found Major Improvements section`);
-              console.log(`   📦 Matched text length: ${majorMatch[1].length} chars`);
-              
-              const majorText = majorMatch[1].trim();
-              const majorItems = majorText
-                .split('\n')
-                .filter(line => line.trim().startsWith('-'))
-                .map(line => line.trim().substring(1).trim())
-                .filter(item => item.length > 0);
-              console.log(`   ✅ Extracted ${majorItems.length} major item(s)`);
-              requestedChanges.push(...majorItems);
-            } else {
-              console.log(`   ❌ No Major Improvements section found`);
+              const issues = this.parseEvidenceBasedIssues(majorSection[0], 'major');
+              requestedChanges.push(...issues);
+              console.log(`   ✅ Extracted ${issues.length} major issue(s)`);
             }
             
-            console.log(`\n   📊 FINAL: Total changes extracted: ${requestedChanges.length}`);
+            console.log(`\n   📊 FINAL: Total ${requestedChanges.length} issue(s) extracted`);
             if (requestedChanges.length > 0) {
-              console.log(`   📋 Changes list:`);
-              requestedChanges.forEach((change, i) => {
-                console.log(`      ${i + 1}. ${change.substring(0, 80)}...`);
+              console.log(`   📋 Issues list:`);
+              requestedChanges.forEach((issue, i) => {
+                console.log(`      ${i + 1}. [${issue.severity}] ${issue.file} Line ${issue.line}: ${issue.problem.substring(0, 60)}...`);
               });
             }
             
@@ -449,20 +379,21 @@ class CoderAgent {
         
         if (feedback.requestedChanges.length > 0) {
           console.log(`   🔧 Requested Changes (${feedback.requestedChanges.length}):`);
-          feedback.requestedChanges.forEach((change, i) => {
-            console.log(`      ${i + 1}. ${change}`);
+          feedback.requestedChanges.forEach((issue, i) => {
+            console.log(`      ${i + 1}. [${issue.severity}] ${issue.file}:${issue.line}`);
+            console.log(`         Problem: ${issue.problem}`);
+            console.log(`         Solution: ${issue.solution}`);
           });
         }
         
         await this.sendEvent({
           type: 'pr_feedback_read',
-          message: `PR #${prNumber} feedback analyzed`,
+          message: `PR #${prNumber} evidence-based feedback analyzed`,
           details: JSON.stringify({
             reviewDecision: feedback.reviewDecision,
-            changesCount: feedback.requestedChanges.length,
-            plan: feedback.requestedChanges.length > 0 
-              ? `Will address: ${feedback.requestedChanges.slice(0, 2).join(', ')}${feedback.requestedChanges.length > 2 ? '...' : ''}`
-              : 'No specific changes requested'
+            issuesCount: feedback.requestedChanges.length,
+            critical: feedback.requestedChanges.filter(i => i.severity === 'critical').length,
+            major: feedback.requestedChanges.filter(i => i.severity === 'major').length
           }),
           activity: `✅ Analyzed PR #${prNumber}`
         });
@@ -486,6 +417,47 @@ class CoderAgent {
         summary: 'Failed to read feedback'
       };
     }
+  }
+  
+  /**
+   * 🆕 Parse Evidence-Based Issues aus Review-Kommentar
+   */
+  parseEvidenceBasedIssues(sectionText, severity) {
+    const issues = [];
+    
+    // Regex für Evidence-Based Format:
+    // **📍 File:** `path`
+    // **📏 Line:** 123
+    // **❌ Problem:** text
+    // **📋 Evidence:** ```code```
+    // **✅ Solution:** text
+    
+    // Finde alle Issue-Blöcke (beginnend mit ### und dann die strukturierten Felder)
+    const issueBlocks = sectionText.split(/###\s*\d+\./);
+    
+    for (const block of issueBlocks) {
+      if (block.trim().length === 0) continue;
+      
+      // Extrahiere strukturierte Felder
+      const fileMatch = block.match(/\*\*📍 File:\*\*\s*`([^`]+)`/);
+      const lineMatch = block.match(/\*\*📏 Line:\*\*\s*([\d-]+)/);
+      const problemMatch = block.match(/\*\*❌ Problem:\*\*\s*([^\n]+)/);
+      const evidenceMatch = block.match(/\*\*📋 Evidence:\*\*\s*```([\s\S]*?)```/);
+      const solutionMatch = block.match(/\*\*✅ Solution:\*\*\s*([\s\S]*?)(?=\n\n|$)/);
+      
+      if (fileMatch && problemMatch && solutionMatch) {
+        issues.push({
+          severity: severity,
+          file: fileMatch[1],
+          line: lineMatch ? lineMatch[1] : 'unknown',
+          problem: problemMatch[1].trim(),
+          evidence: evidenceMatch ? evidenceMatch[1].trim() : '',
+          solution: solutionMatch[1].trim()
+        });
+      }
+    }
+    
+    return issues;
   }
 
   /**
@@ -653,22 +625,30 @@ Antworte NUR mit JSON Array:
   }
 
   /**
-   * SCHRITT 1: Plane welche Files geändert werden müssen
+   * SCHRITT 1: Plane welche Files geändert werden müssen (Evidence-Based)
    */
   async planImplementation(ticket, context, prFeedback = null) {
     console.log(`\n${this.emoji} Planning implementation...`);
     
-    // 🔥 NEU: Füge PR-Feedback zum Prompt hinzu wenn vorhanden
+    // 🔥 NEU: Füge PR-Feedback zum Prompt hinzu wenn vorhanden (STRUCTURED FORMAT!)
     const feedbackSection = prFeedback && prFeedback.requestedChanges.length > 0 
-      ? `\n=== REVIEWER FEEDBACK (MUST ADDRESS!) ===
+      ? `\n=== REVIEWER FEEDBACK (EVIDENCE-BASED - MUST ADDRESS!) ===
 **Review Status:** ${prFeedback.reviewDecision}
 
-**Requested Changes:**
-${prFeedback.requestedChanges.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+**Requested Changes (${prFeedback.requestedChanges.length} issues):**
 
-**WICHTIG:** Diese Änderungen müssen ZWINGEND umgesetzt werden! Der Reviewer hat explizit danach gefragt.
+${prFeedback.requestedChanges.map((issue, i) => `
+${i + 1}. [${issue.severity.toUpperCase()}] ${issue.file}:${issue.line}
+   Problem: ${issue.problem}
+   ${issue.evidence ? `Evidence: ${issue.evidence.substring(0, 200)}${issue.evidence.length > 200 ? '...' : ''}\n   ` : ''}Solution: ${issue.solution}
+`).join('')}
+
+⚠️ KRITISCH: Diese Änderungen müssen EXAKT wie vom Reviewer beschrieben umgesetzt werden!
+- Der Reviewer hat KONKRETE Dateien, Zeilen und Lösungen angegeben
+- Implementiere GENAU diese Lösungen, nicht deine eigenen Ideen
+- Fokussiere dich NUR auf die genannten Dateien und Probleme
 `
-      : '';
+      : ''
     
     const prompt = `Du bist ein Senior Full-Stack Developer. Analysiere die Anforderungen und erstelle einen Implementierungsplan.
 ${feedbackSection ? '\n⚠️ ACHTUNG: Dies ist ein REWORK! Der Reviewer hat Änderungen angefordert. Fokussiere dich NUR auf die geforderten Änderungen!' : ''}
@@ -1241,7 +1221,7 @@ _Erstellt am ${new Date().toISOString()}_`;
   }
 
   /**
-   * 🆕 Poste Jira-Kommentar wenn Rework startet
+   * 🆕 Poste Jira-Kommentar wenn Rework startet (Evidence-Based)
    */
   async postReworkStartComment(ticket, pullRequest, prFeedback) {
     console.log(`\n${this.emoji} Posting rework start comment to Jira...`);
@@ -1252,15 +1232,28 @@ _Erstellt am ${new Date().toISOString()}_`;
     comment += `🔍 **Review Status**: ${prFeedback.reviewDecision}\n\n`;
     
     if (prFeedback.requestedChanges.length > 0) {
-      comment += `## 🔧 Änderungen die umgesetzt werden (${prFeedback.requestedChanges.length}):\n\n`;
+      const critical = prFeedback.requestedChanges.filter(i => i.severity === 'critical');
+      const major = prFeedback.requestedChanges.filter(i => i.severity === 'major');
       
-      prFeedback.requestedChanges.forEach((change, index) => {
-        // Kürze lange Changes für bessere Lesbarkeit
-        const shortChange = change.length > 100 ? change.substring(0, 100) + '...' : change;
-        comment += `${index + 1}. ${shortChange}\n`;
-      });
+      comment += `## 🔧 Änderungen die umgesetzt werden:\n\n`;
       
-      comment += `\n`;
+      if (critical.length > 0) {
+        comment += `### 🚨 Critical Issues (${critical.length})\n\n`;
+        critical.forEach((issue, index) => {
+          comment += `${index + 1}. **${issue.file}** (Line ${issue.line})\n`;
+          comment += `   Problem: ${issue.problem}\n`;
+          comment += `   Lösung: ${issue.solution.substring(0, 150)}${issue.solution.length > 150 ? '...' : ''}\n\n`;
+        });
+      }
+      
+      if (major.length > 0) {
+        comment += `### ⚠️ Major Improvements (${major.length})\n\n`;
+        major.forEach((issue, index) => {
+          comment += `${index + 1}. **${issue.file}** (Line ${issue.line})\n`;
+          comment += `   Problem: ${issue.problem}\n`;
+          comment += `   Lösung: ${issue.solution.substring(0, 150)}${issue.solution.length > 150 ? '...' : ''}\n\n`;
+        });
+      }
     }
     
     comment += `## ✅ Nächste Schritte\n`;
