@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import FileDiscoveryUtil from '../shared-utils/file-discovery.js';
 
 dotenv.config();
 
@@ -35,6 +36,12 @@ class TechnicalProductOwnerAgent {
     this.processedTickets = new Set();
     this.agentDocumentation = null;
     this.realFiles = [];
+    
+    // 🆕 Initialisiere File Discovery Utility
+    this.fileDiscovery = new FileDiscoveryUtil(
+      this.callMCPTool.bind(this),
+      this.emoji
+    );
     
     // Angular Best Practices & Architecture Rules
     this.angularRules = {
@@ -147,39 +154,12 @@ class TechnicalProductOwnerAgent {
     console.log(`   ✅ Extracted ${this.realFiles.length} files`);
   }
 
+  /**
+   * 🆕 VERWENDET JETZT: FileDiscoveryUtil
+   */
   async discoverRealFilesViaMCP() {
-    try {
-      const backendResult = await this.callMCPTool('github', 'list_directory', { 
-        path: 'test-app/backend' 
-      });
-      
-      const frontendResult = await this.callMCPTool('github', 'list_directory', { 
-        path: 'test-app/frontend/src/app' 
-      });
-      
-      const discoveredFiles = [];
-      
-      if (backendResult.success && backendResult.files) {
-        backendResult.files.forEach(file => {
-          if (file.endsWith('.js')) discoveredFiles.push(`test-app/backend/${file}`);
-        });
-      }
-      
-      if (frontendResult.success && frontendResult.files) {
-        frontendResult.files.forEach(file => {
-          if (file.endsWith('.ts')) discoveredFiles.push(`test-app/frontend/src/app/${file}`);
-        });
-      }
-      
-      if (discoveredFiles.length > 0) {
-        console.log(`   ✅ Discovered ${discoveredFiles.length} files via MCP`);
-        return discoveredFiles;
-      }
-    } catch (error) {
-      console.log(`   ⚠️  MCP discovery failed: ${error.message}`);
-    }
-    
-    return null;
+    const result = await this.fileDiscovery.discoverProjectFiles();
+    return result.all;
   }
 
   async getNewTickets() {
@@ -368,29 +348,62 @@ Antworte NUR mit JSON:
     return ticketsToCheck;
   }
 
+  /**
+   * 🆕 VERWENDET JETZT: FileDiscoveryUtil mit improved grouping
+   */
   async selectRelevantFiles(ticket) {
-    const mcpFiles = await this.discoverRealFilesViaMCP();
-    const availableFiles = mcpFiles || this.realFiles;
+    const allFiles = await this.discoverRealFilesViaMCP();
     
-    if (availableFiles.length === 0) return [];
+    if (allFiles.length === 0) {
+      console.log(`   ⚠️  No files discovered`);
+      return [];
+    }
     
-    const fileList = availableFiles.join('\n- ');
+    console.log(`\n${this.emoji} Selecting relevant files for ticket...`);
     
-    const prompt = `Du bist ein Technical Product Owner.
+    // Verwende FileDiscoveryUtil für Grouping
+    const fileGroups = this.fileDiscovery.groupFilesByType(allFiles);
+    
+    const prompt = `Du bist ein Technical Product Owner. Wähle die relevantesten Files für dieses Ticket.
 
+=== TICKET ===
 Ticket: ${ticket.key}
 Summary: ${ticket.summary}
+Description: ${ticket.description?.substring(0, 500) || 'Keine'}
 
-Verfügbare Files:
-- ${fileList}
+=== VERFÜGBARE FILE-GRUPPEN ===
 
-Wähle die 2-5 relevantesten Files.
-Antworte NUR mit JSON Array: ["file1", "file2"]`;
+**Backend (${fileGroups.backend.length} files):**
+${fileGroups.backend.slice(0, 10).join('\n')}
+
+**Frontend Core (${fileGroups.core.length} files):**
+${fileGroups.core.join('\n')}
+
+**Models & Services (${fileGroups.models.length + fileGroups.services.length} files):**
+${[...fileGroups.models, ...fileGroups.services].join('\n')}
+
+**Shared Components (${fileGroups.shared.length} files):**
+${fileGroups.shared.join('\n')}
+
+**Feature Components (${fileGroups.features.length} files):**
+${fileGroups.features.join('\n')}
+
+=== AUFGABE ===
+Wähle die 3-7 relevantesten Files die zum Ticket passen.
+
+**Regeln:**
+1. Wenn Ticket über "User" spricht → user-related Files
+2. Wenn Ticket über UI spricht → frontend Components
+3. Wenn Ticket über API spricht → backend Files
+4. IMMER relevante Models/Services mit einbeziehen
+
+Antworte NUR mit JSON Array:
+["file1", "file2", "file3"]`;
 
     try {
       const message = await this.anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
+        max_tokens: 1000,
         messages: [{ role: 'user', content: prompt }]
       });
 
@@ -401,14 +414,17 @@ Antworte NUR mit JSON Array: ["file1", "file2"]`;
       if (!jsonMatch) throw new Error('No JSON array found');
       
       const selectedFiles = JSON.parse(jsonMatch[0]);
-      const validFiles = selectedFiles.filter(f => availableFiles.includes(f));
+      const validFiles = selectedFiles.filter(f => allFiles.includes(f));
       
-      console.log(`   ✅ Selected ${validFiles.length} files`);
-      return validFiles.length > 0 ? validFiles : availableFiles.slice(0, 3);
+      console.log(`   ✅ Selected ${validFiles.length} relevant files:`);
+      validFiles.forEach(f => console.log(`      - ${f}`));
+      
+      return validFiles.length > 0 ? validFiles : allFiles.slice(0, 5);
       
     } catch (error) {
       console.error(`   ⚠️  Selection failed: ${error.message}`);
-      return availableFiles.slice(0, 3);
+      // Fallback: Nimm ersten 5 Files
+      return allFiles.slice(0, 5);
     }
   }
 

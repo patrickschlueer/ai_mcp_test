@@ -15,15 +15,82 @@ test-app/
 ├── frontend/          # Angular 17 App
 │   └── src/
 │       └── app/
-│           ├── app.component.ts       # Haupt-Component
-│           ├── user.service.ts        # User API Service
-│           └── auth.service.ts        # Auth Service (Platzhalter)
+│           ├── app.component.ts              # Root Component
+│           ├── app.component.html
+│           ├── app.component.css
+│           │
+│           ├── models/                       # Data Models
+│           │   └── user.model.ts
+│           │
+│           ├── services/                     # API Services
+│           │   ├── user.service.ts
+│           │   └── auth.service.ts
+│           │
+│           ├── shared/                       # Reusable Components
+│           │   ├── header/
+│           │   │   ├── header.component.ts
+│           │   │   ├── header.component.html
+│           │   │   └── header.component.css
+│           │   └── alert/
+│           │       ├── alert.component.ts
+│           │       ├── alert.component.html
+│           │       └── alert.component.css
+│           │
+│           └── features/                     # Feature Modules
+│               └── user-management/
+│                   ├── user-form/
+│                   │   ├── user-form.component.ts
+│                   │   ├── user-form.component.html
+│                   │   └── user-form.component.css
+│                   ├── user-list/
+│                   │   ├── user-list.component.ts
+│                   │   ├── user-list.component.html
+│                   │   └── user-list.component.css
+│                   └── user-table-row/
+│                       ├── user-table-row.component.ts
+│                       ├── user-table-row.component.html
+│                       └── user-table-row.component.css
 │
 └── backend/           # Node.js Express Server
     ├── server.js      # API Server
     └── models/
         └── user.js    # User Model & In-Memory DB
 ```
+
+---
+
+## 🎨 Frontend Architektur-Regeln
+
+### Angular Best Practices (WICHTIG für Agents!)
+
+**1. Component Structure**
+- Jede Component hat **3 separate Files**: `.ts`, `.html`, `.css`
+- Verwende `templateUrl` und `styleUrls` - **KEIN** inline template/styles
+- Max **400 Zeilen** pro File
+- Verwende `OnPush` ChangeDetection wo möglich
+
+**2. Component Organization**
+```
+/shared/     → Reusable Components (Header, Alert, Button, etc.)
+/features/   → Feature-spezifische Components
+/models/     → TypeScript Interfaces/Types
+/services/   → API Services & Business Logic
+```
+
+**3. File Organization**
+- **ONE class per file**
+- **ONE interface per file**
+- File-Namen: kebab-case (z.B. `user-form.component.ts`)
+
+**4. State Management** (Geplant, noch nicht implementiert)
+- NgRx (@ngrx/store, effects, entity)
+- RxJS für Reactive Programming
+- Aktuell: Einfache Component-State
+
+**5. Testing** (Noch nicht implementiert)
+- Jedes File sollte `.spec.ts` Test haben
+- Unit Tests mit Jasmine/Karma
+- E2E Tests mit Playwright/Cypress
 
 ---
 
@@ -55,6 +122,11 @@ test-app/
 - Keine Unit Tests
 - Keine Integration Tests
 - Keine E2E Tests
+
+### 6. **Kein State Management**
+- NgRx ist noch nicht implementiert
+- Components verwalten lokalen State
+- Kein zentraler Store
 
 ---
 
@@ -131,22 +203,25 @@ let users = [
 
 ## 📁 Frontend Dokumentation
 
-### `frontend/src/app/app.component.ts`
+### Struktur-Überblick
 
-**Purpose:** Haupt-Component - zeigt User-Liste
+#### `/models/` - Data Models
 
-**Features:**
-- Lädt User beim Start (`ngOnInit`)
-- Zeigt User in Tabelle
-- Buttons zum Hinzufügen/Bearbeiten/Löschen (Platzhalter)
+**`models/user.model.ts`**
+```typescript
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: 'Admin' | 'User' | 'Guest';
+}
+```
 
-**Wichtig:**
-- Nutzt `UserService` für API Calls
-- Keine Fehlerbehandlung
-- Keine Loading States
-- Keine Pagination
+**Purpose:** TypeScript Interfaces für Type-Safety
 
-### `frontend/src/app/user.service.ts`
+#### `/services/` - Business Logic & API
+
+**`services/user.service.ts`**
 
 **Purpose:** API Service für User-Operationen
 
@@ -165,7 +240,7 @@ deleteUser(id: number): Observable<void> // DELETE /api/users/:id
 - Keine Error Interceptors
 - Keine Retry Logic
 
-### `frontend/src/app/auth.service.ts`
+**`services/auth.service.ts`**
 
 **Purpose:** Authentifizierungs-Service (**PLATZHALTER!**)
 
@@ -187,11 +262,116 @@ export class AuthService {
   - Auth Guards für Protected Routes
   - **Dies existiert aktuell NICHT**
 
+#### `/shared/` - Reusable Components
+
+**Purpose:** Wiederverwendbare UI-Components
+
+**Struktur:**
+```
+shared/
+├── header/          # App Header mit Navigation
+├── alert/           # Alert/Notification Component
+└── [future components...]
+```
+
+**Regel:** Components in `/shared/` dürfen **KEINE** Business Logic enthalten
+- Nur Präsentation
+- Input/Output Properties
+- Wiederverwendbar in jedem Feature
+
+**Example: `shared/header/header.component.ts`**
+```typescript
+@Component({
+  selector: 'app-header',
+  templateUrl: './header.component.html',
+  styleUrls: ['./header.component.css']
+})
+export class HeaderComponent {
+  @Input() title: string = 'test-app';
+  @Output() menuClick = new EventEmitter<void>();
+}
+```
+
+#### `/features/` - Feature Modules
+
+**Purpose:** Feature-spezifische Components mit Business Logic
+
+**Struktur:**
+```
+features/
+└── user-management/
+    ├── user-form/          # Create/Edit User Form
+    ├── user-list/          # User List Container
+    └── user-table-row/     # Single User Table Row
+```
+
+**Regel:** Features sind **selbstständige Module**
+- Eigene Components
+- Nutzen Services aus `/services/`
+- Nutzen Shared Components aus `/shared/`
+- Können eigene Sub-Features haben
+
+**Example: `features/user-management/user-list/user-list.component.ts`**
+```typescript
+@Component({
+  selector: 'app-user-list',
+  templateUrl: './user-list.component.html',
+  styleUrls: ['./user-list.component.css']
+})
+export class UserListComponent implements OnInit {
+  users: User[] = [];
+
+  constructor(private userService: UserService) {}
+
+  ngOnInit(): void {
+    this.userService.getUsers().subscribe(users => {
+      this.users = users;
+    });
+  }
+
+  onDeleteUser(id: number): void {
+    this.userService.deleteUser(id).subscribe(() => {
+      this.users = this.users.filter(u => u.id !== id);
+    });
+  }
+}
+```
+
+#### `app.component.ts` - Root Component
+
+**Purpose:** Application Root - Orchestriert Haupt-Layout
+
+**Responsibilities:**
+- Rendered `<app-header>`
+- Rendered `<router-outlet>` (wenn Routing implementiert)
+- Global State Management (wenn implementiert)
+
+**Aktuell:**
+- Zeigt Header
+- Zeigt User-List direkt
+- Keine Routing
+
 ---
 
 ## 🎯 Typische Ticket-Szenarien (für Agents)
 
-### Szenario 1: "Rollenkonzept implementieren"
+### Szenario 1: "Neue UI-Component erstellen"
+
+**Was der Agent verstehen muss:**
+- Wiederverwendbar? → `/shared/`
+- Feature-spezifisch? → `/features/[feature-name]/`
+- **IMMER** 3 Files: `.ts`, `.html`, `.css`
+- **KEINE** inline templates/styles
+
+**Was zu tun ist:**
+1. Component in korrektem Ordner erstellen
+2. In `app.module.ts` deklarieren
+3. Tests erstellen (`.spec.ts`)
+4. In Parent-Component einbinden
+
+**Story Points:** 2-3 (niedrige Komplexität)
+
+### Szenario 2: "Rollenkonzept implementieren"
 
 **Was der Agent verstehen muss:**
 - Aktuell: `role` ist nur ein String - KEINE Funktionalität
@@ -199,11 +379,12 @@ export class AuthService {
   1. Backend: Middleware für Rechte-Prüfung (`requireRole('Admin')`)
   2. Backend: Endpunkte schützen (z.B. nur Admin kann User löschen)
   3. Frontend: UI anpassen basierend auf Rolle
-  4. Frontend: API-Calls prüfen ob User berechtigt ist
+  4. Frontend: Direktiven für Role-basierte Sichtbarkeit
+  5. Service: `AuthService` erweitern mit Role-Checks
 
 **Story Points:** 5-8 (mittlere Komplexität)
 
-### Szenario 2: "Authentifizierung hinzufügen"
+### Szenario 3: "Authentifizierung hinzufügen"
 
 **Was der Agent verstehen muss:**
 - Aktuell: KEINE Auth - AuthService ist Platzhalter
@@ -211,36 +392,37 @@ export class AuthService {
   1. Backend: JWT-Authentifizierung implementieren
   2. Backend: Login/Register Endpoints
   3. Backend: Middleware für Token-Validierung
-  4. Frontend: Login-Formular
+  4. Frontend: Login-Component (in `/features/auth/`)
   5. Frontend: Token Storage (localStorage/sessionStorage)
   6. Frontend: Auth Guards für Routes
+  7. Frontend: HTTP Interceptor für Token
 
 **Story Points:** 8-13 (hohe Komplexität)
 
-### Szenario 3: "Input Validierung"
+### Szenario 4: "NgRx State Management einführen"
 
 **Was der Agent verstehen muss:**
-- Aktuell: KEINE Validierung - alles wird akzeptiert
+- Aktuell: Component-lokaler State
 - Was zu tun ist:
-  1. Backend: Validation Middleware (z.B. express-validator)
-  2. Backend: Schema Validierung für User
-  3. Frontend: Form Validation (Angular Reactive Forms)
-  4. Frontend: Error Messages anzeigen
+  1. NgRx installieren (`@ngrx/store`, `@ngrx/effects`, `@ngrx/entity`)
+  2. Store Structure definieren
+  3. Actions, Reducers, Effects erstellen
+  4. Services auf Store umstellen
+  5. Components auf Selectors umstellen
 
-**Story Points:** 3-5 (niedrige Komplexität)
+**Story Points:** 8-13 (hohe Komplexität)
 
-### Szenario 4: "Datenbank anbinden"
+### Szenario 5: "User filtern/sortieren"
 
 **Was der Agent verstehen muss:**
-- Aktuell: In-Memory Arrays - keine Persistenz
+- Betrifft: `features/user-management/user-list/`
 - Was zu tun ist:
-  1. Datenbank wählen (MongoDB, PostgreSQL etc.)
-  2. ORM/ODM einrichten (Mongoose, Sequelize etc.)
-  3. Connection Setup
-  4. Migrations/Schema erstellen
-  5. User Model umschreiben
+  1. Filter-UI in `user-list.component.html` hinzufügen
+  2. Filter-Logic in `user-list.component.ts`
+  3. Optional: Filter-Component in `/shared/filters/`
+  4. Backend: Query-Parameter für Filter
 
-**Story Points:** 5-8 (mittlere Komplexität)
+**Story Points:** 3-5 (mittlere Komplexität)
 
 ---
 
@@ -248,24 +430,29 @@ export class AuthService {
 
 ### Bei der Ticket-Analyse folgendes prüfen:
 
-1. **Erwähnt das Ticket "Rollen"?**
+1. **Ist es ein UI-Feature?**
+   - → Component erstellen
+   - Wo? `/shared/` oder `/features/`?
+   - Bestehende Components wiederverwenden?
+
+2. **Erwähnt das Ticket "Rollen"?**
    - Wenn ja: Klarstellen dass aktuell KEIN Rollenkonzept existiert
    - Fragen: Welche Rollen? Welche Rechte pro Rolle?
 
-2. **Erwähnt das Ticket "Auth" oder "Login"?**
+3. **Erwähnt das Ticket "Auth" oder "Login"?**
    - Wenn ja: Klarstellen dass aktuell KEINE Auth existiert
    - Fragen: JWT oder Session? OAuth-Provider?
 
-3. **Erwähnt das Ticket "Datenbank"?**
-   - Wenn ja: Klarstellen dass aktuell In-Memory Storage
-   - Fragen: Welche DB? Migration-Strategie?
+4. **Erwähnt das Ticket "State Management"?**
+   - Wenn ja: Klarstellen dass aktuell kein NgRx
+   - Fragen: Nur lokaler State oder NgRx einführen?
 
-4. **Ist das Feature bereits implementiert?**
-   - Code-Check: Suche nach relevanten Files/Functions
+5. **Ist das Feature bereits implementiert?**
+   - Code-Check: Suche in `/features/`, `/shared/`, `/services/`
    - Wenn vorhanden: Erwähnen in Analyse
 
-5. **Abhängigkeiten zu anderen Features?**
-   - Beispiel: "User-Profile bearbeiten" braucht Auth
+6. **Abhängigkeiten zu anderen Features?**
+   - Beispiel: "User-Profile bearbeiten" braucht `user-form` Component
    - In Analyse erwähnen
 
 ---
@@ -274,42 +461,49 @@ export class AuthService {
 
 Wenn ein Ticket Feature XYZ erwähnt:
 
-1. **Suche im Backend:**
+1. **Suche im Frontend:**
    ```
-   - server.js nach Endpoints
-   - models/ nach relevanten Models
+   /features/        → Feature-spezifische Components
+   /shared/          → Reusable Components
+   /services/        → Business Logic & API
+   /models/          → Data Structures
+   app.component.*   → Root Component
    ```
 
-2. **Suche im Frontend:**
+2. **Suche im Backend:**
    ```
-   - app.component.ts nach UI
-   - *.service.ts nach API Calls
+   server.js         → API Endpoints
+   models/           → Data Models
    ```
 
 3. **Wenn nichts gefunden:**
    - Feature existiert wahrscheinlich nicht
    - In Analyse erwähnen: "Feature nicht implementiert"
+   - Empfehlung: In welchem Ordner sollte es erstellt werden?
 
 ---
 
 ## 📊 Complexity Scoring Guide
 
 **Niedrig (1-3 SP):**
-- UI-Änderungen ohne Logik
-- Simple CRUD Erweiterungen
-- Text/Label Änderungen
+- Neue Shared Component ohne Logic
+- UI-Text/Label Änderungen
+- Simple CSS Anpassungen
+- Kleine Component-Erweiterungen
 
 **Mittel (5-8 SP):**
-- Neue Endpoints mit Logik
+- Neue Feature Component mit Logic
+- Service-Integration
 - Form Validierung
-- State Management
 - Rollenkonzept
+- Filter/Sort Funktionalität
 
 **Hoch (8-13 SP):**
 - Authentifizierung/Autorisierung
-- Datenbank Integration
-- Architektur-Änderungen
-- Payment Integration
+- NgRx State Management einführen
+- Komplexe Feature Module
+- Routing & Guards
+- Datenbank Integration (Backend)
 
 ---
 
@@ -317,10 +511,13 @@ Wenn ein Ticket Feature XYZ erwähnt:
 
 Vor dem Kommentieren eines Tickets:
 
-- [ ] Code in test-app/ durchsucht?
+- [ ] Frontend-Struktur durchsucht? (`/features/`, `/shared/`, `/services/`)
+- [ ] Backend durchsucht? (`server.js`, `/models/`)
 - [ ] Feature bereits vorhanden?
+- [ ] In welchem Ordner gehört das Feature? (`/shared/` oder `/features/`?)
 - [ ] Abhängigkeiten identifiziert?
-- [ ] Aktuelle Einschränkungen beachtet (kein Auth, keine DB, etc.)?
+- [ ] Angular Best Practices beachtet? (Component Split, Max 400 Zeilen, etc.)
+- [ ] Aktuelle Einschränkungen beachtet? (kein Auth, keine DB, kein NgRx)
 - [ ] Fragen für PM formuliert?
 - [ ] Story Points geschätzt basierend auf aktuellem Stand?
 - [ ] Recommendation klar und umsetzbar?
@@ -330,13 +527,19 @@ Vor dem Kommentieren eines Tickets:
 ## 🚨 Häufige Fehler vermeiden
 
 **NICHT tun:**
+- ❌ Inline Templates/Styles in Components
+- ❌ Components mit > 400 Zeilen
+- ❌ Business Logic in `/shared/` Components
 - ❌ Annehmen dass Rollen funktionieren
 - ❌ Annehmen dass Auth existiert
-- ❌ Annehmen dass Daten persistent sind
+- ❌ Annehmen dass NgRx existiert
 - ❌ Features empfehlen die bereits existieren
-- ❌ Complexity unterschätzen (Auth ist NICHT einfach!)
 
 **IMMER tun:**
+- ✅ 3 separate Files pro Component (`.ts`, `.html`, `.css`)
+- ✅ `templateUrl` und `styleUrls` verwenden
+- ✅ Components < 400 Zeilen halten
+- ✅ Shared vs. Features Struktur beachten
 - ✅ Code prüfen bevor analysieren
 - ✅ Einschränkungen klar kommunizieren
 - ✅ Konkrete Fragen stellen
@@ -345,6 +548,24 @@ Vor dem Kommentieren eines Tickets:
 
 ---
 
-**Letzte Aktualisierung:** 2025-10-26
-**Für:** AI Agents (Technical Product Owner, Developer Agents)
+## 🎨 UI/UX Guidelines
+
+**Aktueller Stand:**
+- Kein Design System
+- Kein CSS Framework (kein Bootstrap, Material, Tailwind)
+- Custom CSS für jede Component
+- Responsive Design ist Ziel, aber nicht vollständig implementiert
+
+**Für Designer-Agent:**
+- Neue Components sollten konsistent zum bestehenden Stil sein
+- Farben: Einfache Palette (definiert in CSS)
+- Spacing: Konsistent verwenden
+- Accessibility: ARIA-Labels wo möglich
+
+---
+
+**Letzte Aktualisierung:** 2025-01-27
+**Für:** AI Agents (Technical Product Owner, Developer Agents, Designer Agents, Architect Agents)
 **Projekt:** test-app (Demo-Applikation)
+**Frontend:** Angular 17 mit Best-Practice Struktur
+**Backend:** Node.js Express mit In-Memory Storage
