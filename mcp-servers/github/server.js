@@ -608,6 +608,45 @@ app.post('/tools/approve_pull_request', async (req, res) => {
   }
 });
 
+/**
+ * 🆕 Tool: get_pr_comments
+ */
+app.post('/tools/get_pr_comments', async (req, res) => {
+  try {
+    console.log('[MCP Tool] get_pr_comments called');
+    const { prNumber } = req.body;
+    
+    if (!prNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'prNumber is required'
+      });
+    }
+    
+    await sendEvent({
+      type: 'get_pr_comments',
+      message: `Getting comments for PR #${prNumber}`
+    });
+    
+    const result = await github.getPRComments(prNumber);
+    
+    if (result.success) {
+      await sendEvent({
+        type: 'pr_comments_fetched',
+        message: `Fetched ${result.count} comment(s) for PR #${prNumber}`
+      });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('[MCP Tool] Error in get_pr_comments:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ============================================
 // MCP TOOL CATALOG
 // ============================================
@@ -737,6 +776,14 @@ app.get('/tools', (req, res) => {
           prNumber: { type: 'number', required: true, description: 'Pull request number' }
         },
         endpoint: '/tools/approve_pull_request'
+      },
+      {
+        name: 'get_pr_comments',
+        description: 'Get all comments from a pull request',
+        parameters: {
+          prNumber: { type: 'number', required: true, description: 'Pull request number' }
+        },
+        endpoint: '/tools/get_pr_comments'
       }
     ]
   });

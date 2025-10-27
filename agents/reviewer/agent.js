@@ -119,6 +119,42 @@ class ReviewAgent {
   }
 
   /**
+   * Prüfe ob PR seit letztem Review aktualisiert wurde
+   */
+  async hasRecentUpdates(prNumber) {
+    try {
+      // Hole PR Details mit Comments
+      const prResult = await this.callMCPTool('github', 'get_pull_request', {
+        prNumber
+      });
+
+      if (!prResult.success) return false;
+
+      // Hole PR Comments
+      // TODO: Wenn GitHub MCP Server get_pr_comments hat, hier verwenden
+      // Für jetzt: Check ob "Code Updated" im letzten Update ist
+      const pr = prResult.pr;
+      
+      // Check updated_at timestamp - wenn kürzlich aktualisiert, dann re-review
+      const updatedAt = new Date(pr.updated_at);
+      const now = new Date();
+      const minutesSinceUpdate = (now - updatedAt) / 1000 / 60;
+      
+      // Wenn in letzten 5 Minuten aktualisiert, dann hat Coder wahrscheinlich Fixes gemacht
+      if (minutesSinceUpdate < 5) {
+        console.log(`   🔄 PR #${prNumber} was updated ${Math.round(minutesSinceUpdate)} min ago`);
+        return true;
+      }
+      
+      return false;
+      
+    } catch (error) {
+      console.error(`   ⚠️  Failed to check updates: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
    * Hole alle offenen PRs die ready for review sind
    */
   async getOpenPullRequests() {
@@ -133,14 +169,34 @@ class ReviewAgent {
 
 
       // Filter PRs die vom Coder erstellt wurden und noch nicht reviewed
-      const prsToReview = result.pullRequests.filter(pr => {
+      const prsToReview = [];
+      
+      for (const pr of result.pullRequests) {
         console.log('Found PR:', pr);
-        const createdByCoder = pr.body?.includes('Created by 👨‍💻 Coder Agent');
-        const notReviewed = !this.reviewedPRs.has(pr.number);
+        
+        const createdByCoder = pr.body?.includes('Created by 👨‍💻 Coder Agent') || 
+                             pr.body?.includes('Updated by 👨‍💻 Coder Agent');
         const notApproved = !pr.body?.includes('✅ Approved by 🔍 Review Agent');
         
-        return createdByCoder && notReviewed && notApproved;
-      });
+        if (!createdByCoder || !notApproved) continue;
+        
+        // Check ob bereits reviewed
+        const alreadyReviewed = this.reviewedPRs.has(pr.number);
+        
+        if (alreadyReviewed) {
+          // 🔥 Check ob PR seit Review aktualisiert wurde
+          const hasUpdates = await this.hasRecentUpdates(pr.number);
+          
+          if (hasUpdates) {
+            console.log(`   🔄 PR #${pr.number} has updates, will re-review`);
+            this.reviewedPRs.delete(pr.number); // Reset damit wir neu reviewen
+            prsToReview.push(pr);
+          }
+        } else {
+          // Noch nie reviewed
+          prsToReview.push(pr);
+        }
+      }
 
       console.log(`   Found ${prsToReview.length} PR(s) to review`);
       return prsToReview;
@@ -496,7 +552,58 @@ Reviewe den Code und gib konstruktives Feedback. Antworte mit JSON:
         comment
       });
       
-      console.log(`   ✅ Jira updated`);
+      console.log(`   ✅ Jira comment posted`);
+      
+      // 🔥 CRITICAL: Setze Status basierend auf Review-Ergebnis!
+      if (review.recommendation === 'needs_fixes') {
+        // Changes requested → Zurück zu "To Do" damit Coder es wieder aufnimmt
+        await this.callMCPTool('jira', 'update_ticket', {
+          ticketKey,
+          updates: {
+            status: 'To Do'
+          }
+        });
+        console.log(`   🔄 Ticket status set to 'To Do' - Coder will fix issues`);
+        
+        await this.sendEvent({
+          type: 'changes_requested',
+          message: `Changes requested for ${ticketKey}`,
+          details: `PR #${pr.number} needs fixes`,
+          activity: `⚠️ Changes requested for ${ticketKey}`
+        });
+      } else if (review.recommendation === 'needs_discussion') {
+        // 🔥 NEU: Auch bei Discussion → Zurück zu "To Do" damit Coder die Punkte adressiert
+        await this.callMCPTool('jira', 'update_ticket', {
+          ticketKey,
+          updates: {
+            status: 'To Do'
+          }
+        });
+        console.log(`   💬 Ticket status set to 'To Do' - Coder will address discussion points`);
+        
+        await this.sendEvent({
+          type: 'discussion_requested',
+          message: `Discussion points for ${ticketKey}`,
+          details: `PR #${pr.number} has discussion items`,
+          activity: `💬 Discussion for ${ticketKey}`
+        });
+      } else if (review.recommendation === 'approve') {
+        // Approved → "Fertig" (oder ein custom "Ready to Merge" Status falls vorhanden)
+        await this.callMCPTool('jira', 'update_ticket', {
+          ticketKey,
+          updates: {
+            status: 'Fertig'
+          }
+        });
+        console.log(`   ✅ Ticket status set to 'Fertig'`);
+        
+        await this.sendEvent({
+          type: 'pr_approved',
+          message: `PR approved for ${ticketKey}`,
+          details: `PR #${pr.number} ready to merge`,
+          activity: `✅ Approved ${ticketKey}`
+        });
+      }
       
     } catch (error) {
       console.error(`   ❌ Failed to update Jira: ${error.message}`);

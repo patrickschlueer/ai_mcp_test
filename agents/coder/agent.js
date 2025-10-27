@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import FileDiscoveryUtil from '../shared-utils/file-discovery.js';
 
 dotenv.config();
 
@@ -37,6 +38,13 @@ class CoderAgent {
     
     this.processedTickets = new Set();
     this.currentBranch = null;
+    this.currentPRFeedback = null; // 🆕 Für Rework-Modus
+    
+    // File Discovery Utility
+    this.fileDiscovery = new FileDiscoveryUtil(
+      this.callMCPTool.bind(this),
+      this.emoji
+    );
     
     // Tech Stack Constraints
     this.techStack = {
@@ -236,6 +244,251 @@ class CoderAgent {
   }
 
   /**
+   * Prüfe ob bereits ein PR für dieses Ticket existiert
+   */
+  async findExistingPR(ticket) {
+    console.log(`\n${this.emoji} Checking for existing PR...`);
+    
+    try {
+      const result = await this.callMCPTool('github', 'get_pull_requests', {
+        state: 'open'
+      });
+
+      if (!result.success) return null;
+
+      // Suche PR der zu diesem Ticket gehört
+      const existingPR = result.pullRequests.find(pr => {
+        // Check Title oder Body für Ticket-Key
+        return pr.title?.includes(ticket.key) || pr.body?.includes(ticket.key);
+      });
+
+      if (existingPR) {
+        console.log(`   ✅ Found existing PR #${existingPR.number}: ${existingPR.title}`);
+        console.log(`   🌿 Branch: ${existingPR.headBranch}`);
+        return existingPR;
+      }
+
+      console.log(`   🆕 No existing PR found`);
+      return null;
+      
+    } catch (error) {
+      console.error(`   ⚠️  Failed to check for existing PR: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * 🆕 Lese alle PR-Kommentare und Review-Feedback
+   */
+  async readPRFeedback(prNumber) {
+    console.log(`\n${this.emoji} Reading PR feedback...`);
+    
+    await this.sendEvent({
+      type: 'reading_pr',
+      message: `Reading PR #${prNumber} feedback`,
+      details: 'Analyzing reviewer comments',
+      activity: `📖 Reading PR #${prNumber}`
+    });
+    
+    try {
+      // Hole PR-Kommentare
+      const commentsResult = await this.callMCPTool('github', 'get_pr_comments', {
+        prNumber: prNumber
+      });
+
+      const feedback = {
+        comments: [],
+        reviewDecision: null,
+        requestedChanges: [],
+        summary: ''
+      };
+
+      console.log('Hallo 2');
+
+      if (commentsResult.success && commentsResult.comments) {
+        feedback.comments = commentsResult.comments.map(c => ({
+          author: c.author,
+          body: c.body,
+          createdAt: c.createdAt
+        }));
+
+        console.log('RES');
+        console.log(commentsResult);
+
+        // Extrahiere Review-Entscheidung
+        // 🔥 FIXED: Suche nach den tatsächlichen Markern vom Review Agent
+        const reviewComments = commentsResult.comments.filter(c => 
+          c.body.includes('🔍 **Code Review') || 
+          c.body.includes('🚨 Critical Issues') ||
+          c.body.includes('⚠️ Major Improvements') ||
+          c.body.includes('**Recommendation**:') ||
+          c.body.includes('Review by 🔍 Review Agent')
+        );
+        
+        console.log(`   📋 Found ${reviewComments.length} review comment(s) from Review Agent`);
+
+        console.log('Hallo 1');
+        console.log(reviewComments);
+
+        if (reviewComments.length > 0) {
+          const latestReview = reviewComments[reviewComments.length - 1];
+
+          console.log('LATEST REVIEW:');
+          console.log(latestReview);
+          
+          if (latestReview.body.includes('✅ APPROVED') || latestReview.body.includes('Ready to merge')) {
+            feedback.reviewDecision = 'APPROVED';
+          } else if (latestReview.body.includes('🚨 Critical Issues') || 
+                     latestReview.body.includes('⚠️ Major Improvements') ||
+                     latestReview.body.includes('needs_fixes')) {
+            feedback.reviewDecision = 'CHANGES_REQUESTED';
+            
+            // 🔥 VERBESSERT: Parse das Reviewer-Format
+            const requestedChanges = [];
+            
+            console.log(`\n   🔍 DEBUG: Parsing review comment...`);
+            console.log(`   📏 Comment length: ${latestReview.body.length} chars`);
+            console.log(`   👤 Author: ${latestReview.author}`);
+            
+            // Debug: Zeige erste 500 Zeichen
+            console.log(`\n   📄 Comment preview (first 500 chars):`);
+            console.log(`   ${'-'.repeat(60)}`);
+            console.log(latestReview.body.substring(0, 500));
+            console.log(`   ${'-'.repeat(60)}`);
+            
+            // Debug: Suche nach allen ## Headers
+            const allHeaders = latestReview.body.match(/##[^\n]*/g);
+            if (allHeaders) {
+              console.log(`\n   📋 Found headers in comment:`);
+              allHeaders.forEach((header, i) => {
+                console.log(`      ${i + 1}. "${header}"`);
+              });
+            } else {
+              console.log(`\n   ⚠️  No ## headers found in comment!`);
+            }
+            
+            // Debug: Test verschiedene Regex-Patterns
+            console.log(`\n   🧪 Testing regex patterns...`);
+            
+            // Pattern 1: Mit ##
+            const pattern1 = /## 🚨 Critical Issues\s*([\s\S]*?)(?=\n##|\n---|$)/;
+            console.log(`   Pattern 1: /## 🚨 Critical Issues.../`);
+            console.log(`   Match: ${pattern1.test(latestReview.body) ? '✅ YES' : '❌ NO'}`);
+            
+            // Pattern 2: Ohne ##
+            const pattern2 = /🚨 Critical Issues\s*([\s\S]*?)(?=\n##|\n---|$)/;
+            console.log(`   Pattern 2: /🚨 Critical Issues.../`);
+            console.log(`   Match: ${pattern2.test(latestReview.body) ? '✅ YES' : '❌ NO'}`);
+            
+            // Pattern 3: Case insensitive
+            const pattern3 = /critical issues/i;
+            console.log(`   Pattern 3: /critical issues/i`);
+            console.log(`   Match: ${pattern3.test(latestReview.body) ? '✅ YES' : '❌ NO'}`);
+            
+            // Extrahiere Critical Issues (mit verbessertem Regex)
+            console.log(`\n   🎯 Attempting to extract Critical Issues...`);
+            const criticalMatch = latestReview.body.match(/## 🚨 Critical Issues\s*([\s\S]*?)(?=\n##|\n---|$)/);
+            if (criticalMatch) {
+              console.log(`   ✅ Found Critical Issues section`);
+              console.log(`   📦 Matched text length: ${criticalMatch[1].length} chars`);
+              console.log(`   📄 First 200 chars of match:`);
+              console.log(`   ${'-'.repeat(60)}`);
+              console.log(criticalMatch[1].substring(0, 200));
+              console.log(`   ${'-'.repeat(60)}`);
+              
+              const criticalText = criticalMatch[1].trim();
+              const criticalItems = criticalText
+                .split('\n')
+                .filter(line => line.trim().startsWith('-'))
+                .map(line => line.trim().substring(1).trim())
+                .filter(item => item.length > 0);
+              console.log(`   ✅ Extracted ${criticalItems.length} critical item(s)`);
+              requestedChanges.push(...criticalItems);
+            } else {
+              console.log(`   ❌ No Critical Issues section found`);
+            }
+            
+            // Extrahiere Major Improvements (mit verbessertem Regex)
+            console.log(`\n   🎯 Attempting to extract Major Improvements...`);
+            const majorMatch = latestReview.body.match(/## ⚠️ Major Improvements\s*([\s\S]*?)(?=\n##|\n---|$)/);
+            if (majorMatch) {
+              console.log(`   ✅ Found Major Improvements section`);
+              console.log(`   📦 Matched text length: ${majorMatch[1].length} chars`);
+              
+              const majorText = majorMatch[1].trim();
+              const majorItems = majorText
+                .split('\n')
+                .filter(line => line.trim().startsWith('-'))
+                .map(line => line.trim().substring(1).trim())
+                .filter(item => item.length > 0);
+              console.log(`   ✅ Extracted ${majorItems.length} major item(s)`);
+              requestedChanges.push(...majorItems);
+            } else {
+              console.log(`   ❌ No Major Improvements section found`);
+            }
+            
+            console.log(`\n   📊 FINAL: Total changes extracted: ${requestedChanges.length}`);
+            if (requestedChanges.length > 0) {
+              console.log(`   📋 Changes list:`);
+              requestedChanges.forEach((change, i) => {
+                console.log(`      ${i + 1}. ${change.substring(0, 80)}...`);
+              });
+            }
+            
+            feedback.requestedChanges = requestedChanges;
+          }
+          
+          feedback.summary = latestReview.body;
+        }
+
+        console.log(`   ✅ Read ${feedback.comments.length} comment(s)`);
+        
+        if (feedback.reviewDecision) {
+          console.log(`   📊 Review Status: ${feedback.reviewDecision}`);
+        }
+        
+        if (feedback.requestedChanges.length > 0) {
+          console.log(`   🔧 Requested Changes (${feedback.requestedChanges.length}):`);
+          feedback.requestedChanges.forEach((change, i) => {
+            console.log(`      ${i + 1}. ${change}`);
+          });
+        }
+        
+        await this.sendEvent({
+          type: 'pr_feedback_read',
+          message: `PR #${prNumber} feedback analyzed`,
+          details: JSON.stringify({
+            reviewDecision: feedback.reviewDecision,
+            changesCount: feedback.requestedChanges.length,
+            plan: feedback.requestedChanges.length > 0 
+              ? `Will address: ${feedback.requestedChanges.slice(0, 2).join(', ')}${feedback.requestedChanges.length > 2 ? '...' : ''}`
+              : 'No specific changes requested'
+          }),
+          activity: `✅ Analyzed PR #${prNumber}`
+        });
+      }
+
+      return feedback;
+      
+    } catch (error) {
+      console.error(`   ⚠️  Failed to read PR feedback: ${error.message}`);
+      
+      await this.sendEvent({
+        type: 'error',
+        message: `Failed to read PR feedback`,
+        details: error.message
+      });
+      
+      return {
+        comments: [],
+        reviewDecision: null,
+        requestedChanges: [],
+        summary: 'Failed to read feedback'
+      };
+    }
+  }
+
+  /**
    * Erstelle Feature-Branch
    */
   async createFeatureBranch(ticket) {
@@ -267,6 +520,89 @@ class CoderAgent {
   }
 
   /**
+   * 🆕 Wähle relevante Files basierend auf Ticket (wie TPO Agent)
+   */
+  async selectRelevantFiles(ticket) {
+    console.log(`\n${this.emoji} Selecting relevant files for ticket...`);
+    
+    // Discover alle verfügbaren Files
+    const discoveryResult = await this.fileDiscovery.discoverProjectFiles();
+    const allFiles = discoveryResult.all;
+    
+    if (allFiles.length === 0) {
+      console.log(`   ⚠️  No files discovered`);
+      return [];
+    }
+    
+    // Gruppiere Files nach Typ
+    const fileGroups = this.fileDiscovery.groupFilesByType(allFiles);
+    
+    const prompt = `Du bist ein Senior Developer. Wähle die relevantesten Files für dieses Ticket.
+
+=== TICKET ===
+Ticket: ${ticket.key}
+Summary: ${ticket.summary}
+Description: ${ticket.description?.substring(0, 500) || 'Keine'}
+
+=== VERFÜGBARE FILE-GRUPPEN ===
+
+**Backend (${fileGroups.backend.length} files):**
+${fileGroups.backend.slice(0, 10).join('\n')}
+
+**Frontend Core (${fileGroups.core.length} files):**
+${fileGroups.core.join('\n')}
+
+**Models & Services (${fileGroups.models.length + fileGroups.services.length} files):**
+${[...fileGroups.models, ...fileGroups.services].join('\n')}
+
+**Shared Components (${fileGroups.shared.length} files):**
+${fileGroups.shared.join('\n')}
+
+**Feature Components (${fileGroups.features.length} files):**
+${fileGroups.features.join('\n')}
+
+=== AUFGABE ===
+Wähle die 5-10 relevantesten Files die zum Ticket passen.
+
+**Regeln:**
+1. Wenn Ticket über "User" spricht → user-related Files
+2. Wenn Ticket über UI spricht → frontend Components
+3. Wenn Ticket über API spricht → backend Files
+4. IMMER relevante Models/Services mit einbeziehen
+5. Wähle Files die geändert werden müssen + deren Dependencies
+
+Antworte NUR mit JSON Array:
+["file1", "file2", "file3"]`;
+
+    try {
+      const message = await this.anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      });
+
+      let responseText = message.content[0].text.trim();
+      responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      
+      const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
+      if (!jsonMatch) throw new Error('No JSON array found');
+      
+      const selectedFiles = JSON.parse(jsonMatch[0]);
+      const validFiles = selectedFiles.filter(f => allFiles.includes(f));
+      
+      console.log(`   ✅ Selected ${validFiles.length} relevant files:`);
+      validFiles.forEach(f => console.log(`      - ${f}`));
+      
+      return validFiles.length > 0 ? validFiles : allFiles.slice(0, 5);
+      
+    } catch (error) {
+      console.error(`   ⚠️  Selection failed: ${error.message}`);
+      // Fallback: Nimm erste 5 Files
+      return allFiles.slice(0, 5);
+    }
+  }
+
+  /**
    * Lese alle relevanten Files für Kontext
    */
   async readProjectContext(ticket) {
@@ -276,19 +612,14 @@ class CoderAgent {
     const architecture = this.extractSection(ticket.description, '🏛️ Architektur-Design');
     const uiDesign = this.extractSection(ticket.description, '🎨 UI-Design Spezifikation');
     
-    // Lese aktuelle Code-Files
-    const filesToRead = [
-      'test-app/backend/server.js',
-      'test-app/backend/models/user.js',
-      'test-app/backend/routes/auth.js',
-      'test-app/frontend/src/app/app.component.ts',
-      'test-app/frontend/src/app/app.component.html',
-      'test-app/frontend/src/styles.css'
-    ];
+    // 🔥 VERBESSERT: Verwende eigene selectRelevantFiles() Methode!
+    const selectedFiles = await this.selectRelevantFiles(ticket);
+    
+    console.log(`   📚 Reading ${selectedFiles.length} relevant files for context...`);
 
     const filesContent = [];
     
-    for (const filePath of filesToRead) {
+    for (const filePath of selectedFiles) {
       try {
         const file = await this.callMCPTool('github', 'get_file', { path: filePath });
         
@@ -309,7 +640,8 @@ class CoderAgent {
     return {
       architecture,
       uiDesign,
-      files: filesContent
+      files: filesContent,
+      selectedFiles // Für spätere Verwendung
     };
   }
 
@@ -323,17 +655,31 @@ class CoderAgent {
   /**
    * SCHRITT 1: Plane welche Files geändert werden müssen
    */
-  async planImplementation(ticket, context) {
+  async planImplementation(ticket, context, prFeedback = null) {
     console.log(`\n${this.emoji} Planning implementation...`);
     
-    const prompt = `Du bist ein Senior Full-Stack Developer. Analysiere die Anforderungen und erstelle einen Implementierungsplan.
+    // 🔥 NEU: Füge PR-Feedback zum Prompt hinzu wenn vorhanden
+    const feedbackSection = prFeedback && prFeedback.requestedChanges.length > 0 
+      ? `\n=== REVIEWER FEEDBACK (MUST ADDRESS!) ===
+**Review Status:** ${prFeedback.reviewDecision}
 
+**Requested Changes:**
+${prFeedback.requestedChanges.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+**WICHTIG:** Diese Änderungen müssen ZWINGEND umgesetzt werden! Der Reviewer hat explizit danach gefragt.
+`
+      : '';
+    
+    const prompt = `Du bist ein Senior Full-Stack Developer. Analysiere die Anforderungen und erstelle einen Implementierungsplan.
+${feedbackSection ? '\n⚠️ ACHTUNG: Dies ist ein REWORK! Der Reviewer hat Änderungen angefordert. Fokussiere dich NUR auf die geforderten Änderungen!' : ''}
+${feedbackSection}
 === TICKET ===
 ${ticket.key}: ${ticket.summary}
 ${ticket.description ? ticket.description.substring(0, 2000) : ''}
 
 === EXISTING FILES ===
-${context.files.map(f => `- ${f.path} (${f.size} bytes)`).join('\n')}
+${context.files.length > 0 ? `Relevant files loaded:
+${context.files.map(f => `- ${f.path} (${f.size} bytes)`).join('\n')}` : 'No files loaded yet'}
 
 === TECH STACK CONSTRAINTS ===
 - Frontend: Angular (Custom CSS, NO frameworks!)
@@ -713,12 +1059,12 @@ Gib NUR den neuen File-Content zurück. Kein JSON, nur reiner Code.`;
   /**
    * HAUPT-METHODE: Implementiere die Code-Änderungen (Schritt für Schritt)
    */
-  async implementChanges(ticket, context) {
+  async implementChanges(ticket, context, prFeedback = null) {
     console.log(`\n${this.emoji} Starting implementation (step-by-step)...`);
     
     try {
-      // SCHRITT 1: Erstelle Implementierungsplan
-      const plan = await this.planImplementation(ticket, context);
+      // SCHRITT 1: Erstelle Implementierungsplan (mit optional PR-Feedback)
+      const plan = await this.planImplementation(ticket, context, prFeedback);
       
       // SCHRITT 2: Implementiere jede Datei einzeln
       const changes = [];
@@ -895,6 +1241,57 @@ _Erstellt am ${new Date().toISOString()}_`;
   }
 
   /**
+   * 🆕 Poste Jira-Kommentar wenn Rework startet
+   */
+  async postReworkStartComment(ticket, pullRequest, prFeedback) {
+    console.log(`\n${this.emoji} Posting rework start comment to Jira...`);
+    
+    let comment = `${this.emoji} *Rework Started!*\n\n`;
+    comment += `Ich arbeite jetzt an den Änderungen die vom Review Agent angefordert wurden.\n\n`;
+    comment += `🔗 **Pull Request**: ${pullRequest.url}\n`;
+    comment += `🔍 **Review Status**: ${prFeedback.reviewDecision}\n\n`;
+    
+    if (prFeedback.requestedChanges.length > 0) {
+      comment += `## 🔧 Änderungen die umgesetzt werden (${prFeedback.requestedChanges.length}):\n\n`;
+      
+      prFeedback.requestedChanges.forEach((change, index) => {
+        // Kürze lange Changes für bessere Lesbarkeit
+        const shortChange = change.length > 100 ? change.substring(0, 100) + '...' : change;
+        comment += `${index + 1}. ${shortChange}\n`;
+      });
+      
+      comment += `\n`;
+    }
+    
+    comment += `## ✅ Nächste Schritte\n`;
+    comment += `1. Implementiere die geforderten Änderungen\n`;
+    comment += `2. Update den Pull Request\n`;
+    comment += `3. Warte auf erneutes Review\n\n`;
+    
+    comment += `---\n`;
+    comment += `_Rework gestartet am ${new Date().toISOString()}_`;
+
+    try {
+      await this.callMCPTool('jira', 'add_comment', {
+        ticketKey: ticket.key,
+        comment
+      });
+      
+      console.log(`   ✅ Rework start comment posted to Jira`);
+      
+      await this.sendEvent({
+        type: 'jira_comment_posted',
+        message: `Posted rework start comment to ${ticket.key}`,
+        details: `${prFeedback.requestedChanges.length} changes to address`,
+        activity: `📝 Updating Jira`
+      });
+      
+    } catch (error) {
+      console.error(`   ⚠️  Failed to post Jira comment: ${error.message}`);
+    }
+  }
+
+  /**
    * Verarbeite ein Ticket
    */
   async processTicket(ticket) {
@@ -903,29 +1300,118 @@ _Erstellt am ${new Date().toISOString()}_`;
       console.log(`${this.emoji} Processing: ${ticket.key}`);
       console.log(`${'='.repeat(60)}`);
 
-      // 1. Setze auf "In Arbeit"
-      await this.startWorkOnTicket(ticket);
+      // 🔥 WICHTIG: Prüfe ob bereits ein PR existiert
+      const existingPR = await this.findExistingPR(ticket);
+      
+      let branchName;
+      let isRework = false;
+      
+      if (existingPR) {
+        // 🔄 REWORK MODE: Verwende existierenden Branch
+        console.log(`\n${this.emoji} 🔄 REWORK MODE: Updating existing PR`);
+        branchName = existingPR.headBranch;
+        isRework = true;
+        
+        // 🔥 NEU: Lese PR-Feedback vom Reviewer
+        const prFeedback = await this.readPRFeedback(existingPR.number);
+        
+        // Speichere Feedback für spätere Verwendung
+        this.currentPRFeedback = prFeedback;
+        
+        // 🔥 WICHTIG: Auch bei Rework den Status auf "In Arbeit" setzen!
+        await this.startWorkOnTicket(ticket);
+        
+        // 🔥 NEU: Poste Jira-Kommentar dass Rework gestartet wurde
+        await this.postReworkStartComment(ticket, existingPR, prFeedback);
+        
+        await this.sendEvent({
+          type: 'rework_started',
+          message: `Reworking ${ticket.key} based on review feedback`,
+          details: `PR #${existingPR.number} - ${prFeedback.requestedChanges.length} changes requested`,
+          activity: `🔧 Fixing ${ticket.key}`
+        });
+        
+      } else {
+        // 🆕 FRESH START: Erstelle neuen Branch
+        console.log(`\n${this.emoji} 🆕 FRESH START: Creating new implementation`);
+        
+        // 1. Setze auf "In Arbeit"
+        await this.startWorkOnTicket(ticket);
 
-      // 2. Erstelle Feature-Branch
-      const branchName = await this.createFeatureBranch(ticket);
+        // 2. Erstelle Feature-Branch
+        branchName = await this.createFeatureBranch(ticket);
+      }
 
       // 3. Lese Kontext
       const context = await this.readProjectContext(ticket);
 
-      // 4. Implementiere Änderungen
-      const implementation = await this.implementChanges(ticket, context);
+      // 4. Implementiere Änderungen (mit optional PR-Feedback bei Rework)
+      const implementation = await this.implementChanges(
+        ticket, 
+        context, 
+        isRework ? this.currentPRFeedback : null
+      );
 
       // 5. Wende Änderungen an
       await this.applyChanges(implementation, branchName);
 
-      // 6. Erstelle Pull Request
-      const pullRequest = await this.createPullRequest(ticket, branchName, implementation);
+      // 6. Erstelle oder Update Pull Request
+      let pullRequest;
+      
+      if (isRework) {
+        // 🔄 Update existierenden PR mit neuem Comment
+        console.log(`\n${this.emoji} Updating existing PR with fixes...`);
+        
+        const updateComment = `${this.emoji} **Code Updated - Review Feedback Addressed**
 
-      // 7. Poste Info in Jira
-      await this.postPRInfoToJira(ticket, pullRequest);
+## 🔧 Changes Made
+${implementation.changes.map(c => `- **${c.action}**: \`${c.path}\` - ${c.reason}`).join('\n')}
+
+## ✅ Ready for Re-Review
+The issues from the previous review have been addressed. Please review again.
+
+---
+_Updated by ${this.emoji} ${this.name} at ${new Date().toISOString()}_`;
+        
+        await this.callMCPTool('github', 'add_pr_comment', {
+          prNumber: existingPR.number,
+          comment: updateComment
+        });
+        
+        console.log(`   ✅ PR #${existingPR.number} updated with fixes`);
+        
+        pullRequest = existingPR;
+        
+        await this.sendEvent({
+          type: 'pr_updated',
+          message: `PR updated for ${ticket.key}`,
+          details: `PR #${existingPR.number} ready for re-review`,
+          activity: `✅ Updated PR #${existingPR.number}`
+        });
+        
+      } else {
+        // 🆕 Erstelle neuen PR
+        pullRequest = await this.createPullRequest(ticket, branchName, implementation);
+      }
+
+      // 7. Poste Info in Jira (nur bei neuem PR)
+      if (!isRework) {
+        await this.postPRInfoToJira(ticket, pullRequest);
+      } else {
+        // Bei Rework: Update Jira mit Info dass Fixes applied wurden
+        const reworkComment = `${this.emoji} *Code Fixes Applied!*\n\nDie Review-Feedback wurde umgesetzt und der Pull Request wurde aktualisiert:\n\n🔗 **Pull Request**: ${pullRequest.url}\n\n## ✅ Nächste Schritte\nDer **Review Agent** wird die Änderungen erneut reviewen.\n\n---\n_Aktualisiert am ${new Date().toISOString()}_`;
+        
+        await this.callMCPTool('jira', 'add_comment', {
+          ticketKey: ticket.key,
+          comment: reworkComment
+        });
+        
+        console.log(`   ✅ Jira updated with rework info`);
+      }
 
       this.processedTickets.add(ticket.key);
       this.currentBranch = null;
+      this.currentPRFeedback = null; // Reset nach Verarbeitung
       
       console.log(`\n${this.emoji} ✅ Ticket fully processed!`);
       console.log(`   Waiting for Review Agent...`);

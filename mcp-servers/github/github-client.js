@@ -552,6 +552,42 @@ class GitHubClient {
       };
     }
   }
+
+  /**
+   * 🆕 PR-Kommentare abrufen
+   */
+  async getPRComments(prNumber) {
+    try {
+      console.log(`[GitHubClient] Getting comments for PR #${prNumber}`);
+      
+      const { data } = await this.octokit.rest.issues.listComments({
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: prNumber // PRs sind Issues in GitHub API
+      });
+
+      const comments = data.map(comment => ({
+        id: comment.id,
+        body: comment.body,
+        author: comment.user.login,
+        createdAt: comment.created_at,
+        updatedAt: comment.updated_at,
+        url: comment.html_url
+      }));
+
+      return {
+        success: true,
+        comments: comments,
+        count: comments.length
+      };
+    } catch (error) {
+      console.error(`[GitHubClient] Error getting PR comments:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
 }
 
 export default GitHubClient;
