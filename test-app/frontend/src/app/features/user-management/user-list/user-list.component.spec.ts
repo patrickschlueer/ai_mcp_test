@@ -1,271 +1,266 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { DebugElement } from '@angular/core';
+import { provideMockStore, MockStore } from '@ngrx/store/testing';
+import { Store } from '@ngrx/store';
 import { of } from 'rxjs';
 
 import { UserListComponent } from './user-list.component';
-import { UserService } from '../../../core/services/user.service';
-import { User } from '../../../core/models/user.model';
+import { User } from '../../../shared/models/user.model';
+import * as UserActions from '../../../store/actions/user.actions';
+import { selectAllUsers, selectUsersLoading } from '../../../store/selectors/user.selectors';
 
 describe('UserListComponent', () => {
   let component: UserListComponent;
   let fixture: ComponentFixture<UserListComponent>;
-  let userService: jasmine.SpyObj<UserService>;
-  let mockUsers: User[];
+  let store: MockStore;
+  let dispatchSpy: jasmine.Spy;
+
+  const mockUsers: User[] = [
+    {
+      id: '1',
+      name: 'John Doe',
+      email: 'john.doe@example.com',
+      role: 'Admin',
+      status: 'Active',
+      createdAt: new Date('2024-01-01')
+    },
+    {
+      id: '2',
+      name: 'Jane Smith',
+      email: 'jane.smith@example.com',
+      role: 'User',
+      status: 'Inactive',
+      createdAt: new Date('2024-01-02')
+    },
+    {
+      id: '3',
+      name: 'Bob Johnson',
+      email: 'bob.johnson@example.com',
+      role: 'Moderator',
+      status: 'Active',
+      createdAt: new Date('2024-01-03')
+    }
+  ];
 
   beforeEach(async () => {
-    const userServiceSpy = jasmine.createSpyObj('UserService', ['getUsers']);
-
-    mockUsers = [
-      {
-        id: '1',
-        name: 'John Doe',
-        email: 'john@example.com',
-        role: 'admin',
-        status: 'active',
-        createdAt: new Date('2024-01-01')
-      },
-      {
-        id: '2',
-        name: 'Jane Smith',
-        email: 'jane@example.com',
-        role: 'user',
-        status: 'inactive',
-        createdAt: new Date('2024-01-02')
-      },
-      {
-        id: '3',
-        name: 'Bob Johnson',
-        email: 'bob@test.com',
-        role: 'user',
-        status: 'active',
-        createdAt: new Date('2024-01-03')
-      }
-    ];
-
     await TestBed.configureTestingModule({
       declarations: [UserListComponent],
       providers: [
-        { provide: UserService, useValue: userServiceSpy }
+        provideMockStore({
+          initialState: {},
+          selectors: [
+            { selector: selectAllUsers, value: mockUsers },
+            { selector: selectUsersLoading, value: false }
+          ]
+        })
       ]
     }).compileComponents();
 
-    userService = TestBed.inject(UserService) as jasmine.SpyObj<UserService>;
-    userService.getUsers.and.returnValue(of(mockUsers));
-
     fixture = TestBed.createComponent(UserListComponent);
     component = fixture.componentInstance;
+    store = TestBed.inject(MockStore);
+    dispatchSpy = spyOn(store, 'dispatch');
+    
+    fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('Component Initialization', () => {
-    it('should initialize with empty searchQuery', () => {
-      expect(component.searchQuery).toBe('');
-    });
-
-    it('should load users on init', () => {
-      fixture.detectChanges();
-      expect(userService.getUsers).toHaveBeenCalled();
-      expect(component.users).toEqual(mockUsers);
-    });
-
-    it('should initialize filteredUsers with all users', () => {
-      fixture.detectChanges();
-      expect(component.filteredUsers).toEqual(mockUsers);
-    });
+  it('should load users on init', () => {
+    expect(dispatchSpy).toHaveBeenCalledWith(UserActions.loadUsers());
   });
 
-  describe('filterUsers method', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
+  it('should display all users initially', () => {
+    const userRows = fixture.debugElement.queryAll(By.css('.user-row'));
+    expect(userRows.length).toBe(3);
+  });
+
+  describe('Search functionality', () => {
+    it('should initialize searchTerm as empty string', () => {
+      expect(component.searchTerm).toBe('');
     });
 
-    it('should filter users by name (case insensitive)', () => {
-      component.searchQuery = 'john';
+    it('should filter users by name when searchTerm is set', () => {
+      component.searchTerm = 'John';
       component.filterUsers();
+      fixture.detectChanges();
 
       expect(component.filteredUsers.length).toBe(1);
       expect(component.filteredUsers[0].name).toBe('John Doe');
     });
 
-    it('should filter users by email (case insensitive)', () => {
-      component.searchQuery = 'jane@example';
+    it('should filter users by email when searchTerm is set', () => {
+      component.searchTerm = 'jane.smith';
       component.filterUsers();
+      fixture.detectChanges();
 
       expect(component.filteredUsers.length).toBe(1);
-      expect(component.filteredUsers[0].email).toBe('jane@example.com');
+      expect(component.filteredUsers[0].email).toBe('jane.smith@example.com');
     });
 
-    it('should return multiple matching users', () => {
-      component.searchQuery = 'user';
+    it('should be case insensitive when filtering', () => {
+      component.searchTerm = 'JOHN';
       component.filterUsers();
+      fixture.detectChanges();
 
-      const userRoleUsers = component.filteredUsers.filter(u => u.role === 'user');
-      expect(userRoleUsers.length).toBe(2);
+      expect(component.filteredUsers.length).toBe(1);
+      expect(component.filteredUsers[0].name).toBe('John Doe');
     });
 
-    it('should return empty array when no matches found', () => {
-      component.searchQuery = 'nonexistent';
+    it('should show all users when searchTerm is empty', () => {
+      component.searchTerm = '';
       component.filterUsers();
+      fixture.detectChanges();
+
+      expect(component.filteredUsers.length).toBe(3);
+    });
+
+    it('should show no users when searchTerm matches nothing', () => {
+      component.searchTerm = 'nonexistent';
+      component.filterUsers();
+      fixture.detectChanges();
 
       expect(component.filteredUsers.length).toBe(0);
     });
 
-    it('should return all users when search query is empty', () => {
-      component.searchQuery = '';
-      component.filterUsers();
-
-      expect(component.filteredUsers).toEqual(mockUsers);
-    });
-
-    it('should handle whitespace-only search query', () => {
-      component.searchQuery = '   ';
-      component.filterUsers();
-
-      expect(component.filteredUsers).toEqual(mockUsers);
-    });
-
-    it('should filter by partial name match', () => {
-      component.searchQuery = 'Jo';
-      component.filterUsers();
-
-      expect(component.filteredUsers.length).toBe(2);
-      const names = component.filteredUsers.map(u => u.name);
-      expect(names).toContain('John Doe');
-      expect(names).toContain('Bob Johnson');
-    });
-
-    it('should filter by partial email match', () => {
-      component.searchQuery = 'example';
-      component.filterUsers();
-
-      expect(component.filteredUsers.length).toBe(2);
-      const emails = component.filteredUsers.map(u => u.email);
-      expect(emails).toContain('john@example.com');
-      expect(emails).toContain('jane@example.com');
-    });
-  });
-
-  describe('onSearchChange method', () => {
-    beforeEach(() => {
-      fixture.detectChanges();
+    it('should filter users when onSearchChange is called', () => {
       spyOn(component, 'filterUsers');
-    });
-
-    it('should update searchQuery and call filterUsers', () => {
-      const searchTerm = 'test search';
-      component.onSearchChange(searchTerm);
-
-      expect(component.searchQuery).toBe(searchTerm);
+      
+      component.onSearchChange('test search');
+      
+      expect(component.searchTerm).toBe('test search');
       expect(component.filterUsers).toHaveBeenCalled();
     });
 
-    it('should handle empty search term', () => {
-      component.onSearchChange('');
+    it('should update displayed users after filtering', () => {
+      component.searchTerm = 'Jane';
+      component.filterUsers();
+      fixture.detectChanges();
 
-      expect(component.searchQuery).toBe('');
-      expect(component.filterUsers).toHaveBeenCalled();
+      const userRows = fixture.debugElement.queryAll(By.css('.user-row'));
+      expect(userRows.length).toBe(1);
+      
+      const nameCell = userRows[0].query(By.css('.user-name'));
+      expect(nameCell.nativeElement.textContent.trim()).toBe('Jane Smith');
+    });
+
+    it('should handle partial matches in name and email', () => {
+      component.searchTerm = 'o';
+      component.filterUsers();
+      fixture.detectChanges();
+
+      // Should match 'John Doe', 'Bob Johnson'
+      expect(component.filteredUsers.length).toBe(2);
+      expect(component.filteredUsers.some(user => user.name === 'John Doe')).toBe(true);
+      expect(component.filteredUsers.some(user => user.name === 'Bob Johnson')).toBe(true);
     });
   });
 
-  describe('Template Integration', () => {
-    beforeEach(() => {
+  describe('User display', () => {
+    it('should display user information correctly', () => {
+      const firstUserRow = fixture.debugElement.query(By.css('.user-row'));
+      
+      const nameElement = firstUserRow.query(By.css('.user-name'));
+      const emailElement = firstUserRow.query(By.css('.user-email'));
+      const roleElement = firstUserRow.query(By.css('.user-role'));
+      const statusElement = firstUserRow.query(By.css('.user-status'));
+
+      expect(nameElement.nativeElement.textContent.trim()).toBe('John Doe');
+      expect(emailElement.nativeElement.textContent.trim()).toBe('john.doe@example.com');
+      expect(roleElement.nativeElement.textContent.trim()).toBe('Admin');
+      expect(statusElement.nativeElement.textContent.trim()).toBe('Active');
+    });
+
+    it('should show loading state', () => {
+      store.overrideSelector(selectUsersLoading, true);
+      store.refreshState();
       fixture.detectChanges();
+
+      const loadingElement = fixture.debugElement.query(By.css('.loading'));
+      expect(loadingElement).toBeTruthy();
     });
 
-    it('should render all users initially', () => {
-      const userElements = fixture.debugElement.queryAll(By.css('.user-item'));
-      expect(userElements.length).toBe(3);
-    });
-
-    it('should update displayed users when filtered', () => {
-      component.searchQuery = 'john';
+    it('should show empty state when no users match filter', () => {
+      component.searchTerm = 'nonexistent';
       component.filterUsers();
       fixture.detectChanges();
 
-      const userElements = fixture.debugElement.queryAll(By.css('.user-item'));
-      expect(userElements.length).toBe(1);
-    });
-
-    it('should display user count correctly', () => {
-      const countElement = fixture.debugElement.query(By.css('.user-count'));
-      if (countElement) {
-        expect(countElement.nativeElement.textContent).toContain('3');
-      }
-    });
-
-    it('should show filtered count when search is applied', () => {
-      component.searchQuery = 'john';
-      component.filterUsers();
-      fixture.detectChanges();
-
-      const countElement = fixture.debugElement.query(By.css('.user-count'));
-      if (countElement) {
-        expect(countElement.nativeElement.textContent).toContain('1');
-      }
-    });
-
-    it('should display no results message when no users match filter', () => {
-      component.searchQuery = 'nonexistent';
-      component.filterUsers();
-      fixture.detectChanges();
-
-      const noResultsElement = fixture.debugElement.query(By.css('.no-results'));
-      expect(noResultsElement).toBeTruthy();
+      const emptyStateElement = fixture.debugElement.query(By.css('.empty-state'));
+      expect(emptyStateElement).toBeTruthy();
     });
   });
 
-  describe('Edge Cases', () => {
-    it('should handle undefined users array', () => {
-      component.users = undefined as any;
-      component.searchQuery = 'test';
-      
-      expect(() => component.filterUsers()).not.toThrow();
-      expect(component.filteredUsers).toEqual([]);
+  describe('User actions', () => {
+    it('should dispatch edit user action when edit button is clicked', () => {
+      const editButton = fixture.debugElement.query(By.css('.edit-btn'));
+      editButton.nativeElement.click();
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        UserActions.selectUser({ user: mockUsers[0] })
+      );
     });
 
-    it('should handle null searchQuery', () => {
-      component.searchQuery = null as any;
-      
-      expect(() => component.filterUsers()).not.toThrow();
+    it('should dispatch delete user action when delete button is clicked', () => {
+      const deleteButton = fixture.debugElement.query(By.css('.delete-btn'));
+      deleteButton.nativeElement.click();
+
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        UserActions.deleteUser({ id: mockUsers[0].id })
+      );
+    });
+  });
+
+  describe('Component lifecycle', () => {
+    it('should initialize filteredUsers with all users on init', () => {
       expect(component.filteredUsers).toEqual(mockUsers);
     });
 
-    it('should handle special characters in search', () => {
-      component.searchQuery = '@example.com';
+    it('should update filteredUsers when users change', () => {
+      const newUsers: User[] = [
+        {
+          id: '4',
+          name: 'New User',
+          email: 'new.user@example.com',
+          role: 'User',
+          status: 'Active',
+          createdAt: new Date()
+        }
+      ];
+
+      store.overrideSelector(selectAllUsers, newUsers);
+      store.refreshState();
+      fixture.detectChanges();
+
+      expect(component.filteredUsers).toEqual(newUsers);
+    });
+
+    it('should maintain search filter when users update', () => {
+      component.searchTerm = 'John';
+      component.filterUsers();
+      
+      const updatedUsers = [
+        ...mockUsers,
+        {
+          id: '4',
+          name: 'Johnny Cash',
+          email: 'johnny.cash@example.com',
+          role: 'User',
+          status: 'Active',
+          createdAt: new Date()
+        }
+      ];
+
+      store.overrideSelector(selectAllUsers, updatedUsers);
+      store.refreshState();
+      fixture.detectChanges();
       component.filterUsers();
 
       expect(component.filteredUsers.length).toBe(2);
-    });
-
-    it('should handle numeric search terms', () => {
-      component.searchQuery = '1';
-      component.filterUsers();
-
-      // Should not match anything in name/email for our test data
-      expect(component.filteredUsers.length).toBe(0);
-    });
-  });
-
-  describe('Performance', () => {
-    it('should not modify original users array during filtering', () => {
-      const originalUsers = [...mockUsers];
-      component.searchQuery = 'john';
-      component.filterUsers();
-
-      expect(component.users).toEqual(originalUsers);
-    });
-
-    it('should create new filteredUsers array on each filter', () => {
-      const firstFilter = component.filteredUsers;
-      component.searchQuery = 'test';
-      component.filterUsers();
-      const secondFilter = component.filteredUsers;
-
-      expect(firstFilter).not.toBe(secondFilter);
+      expect(component.filteredUsers.some(user => user.name === 'John Doe')).toBe(true);
+      expect(component.filteredUsers.some(user => user.name === 'Johnny Cash')).toBe(true);
     });
   });
 });
