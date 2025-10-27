@@ -3,6 +3,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { UserService } from './user.service';
 import { User } from '../models/user.model';
 import { UserFilter } from '../models/user-filter.model';
+import { of, throwError } from 'rxjs';
 
 describe('UserService', () => {
   let service: UserService;
@@ -14,24 +15,27 @@ describe('UserService', () => {
       name: 'John Doe',
       email: 'john@example.com',
       role: 'admin',
-      isActive: true,
-      createdAt: new Date('2024-01-01')
+      status: 'active',
+      createdAt: new Date('2023-01-01'),
+      department: 'IT'
     },
     {
       id: '2',
       name: 'Jane Smith',
       email: 'jane@example.com',
       role: 'user',
-      isActive: false,
-      createdAt: new Date('2024-01-15')
+      status: 'inactive',
+      createdAt: new Date('2023-02-01'),
+      department: 'HR'
     },
     {
       id: '3',
       name: 'Bob Johnson',
       email: 'bob@example.com',
       role: 'moderator',
-      isActive: true,
-      createdAt: new Date('2024-02-01')
+      status: 'active',
+      createdAt: new Date('2023-03-01'),
+      department: 'IT'
     }
   ];
 
@@ -53,10 +57,9 @@ describe('UserService', () => {
   });
 
   describe('getUsers', () => {
-    it('should return all users without filter', () => {
+    it('should return users without filters', () => {
       service.getUsers().subscribe(users => {
         expect(users).toEqual(mockUsers);
-        expect(users.length).toBe(3);
       });
 
       const req = httpMock.expectOne('/api/users');
@@ -64,165 +67,78 @@ describe('UserService', () => {
       req.flush(mockUsers);
     });
 
-    it('should return filtered users by name', () => {
+    it('should return users with query parameters when filters applied', () => {
       const filter: UserFilter = {
-        name: 'John'
-      };
-
-      const filteredUsers = [mockUsers[0]];
-
-      service.getUsers(filter).subscribe(users => {
-        expect(users).toEqual(filteredUsers);
-        expect(users.length).toBe(1);
-        expect(users[0].name).toContain('John');
-      });
-
-      const req = httpMock.expectOne('/api/users?name=John');
-      expect(req.request.method).toBe('GET');
-      req.flush(filteredUsers);
-    });
-
-    it('should return filtered users by email', () => {
-      const filter: UserFilter = {
-        email: 'jane@example.com'
-      };
-
-      const filteredUsers = [mockUsers[1]];
-
-      service.getUsers(filter).subscribe(users => {
-        expect(users).toEqual(filteredUsers);
-        expect(users.length).toBe(1);
-        expect(users[0].email).toBe('jane@example.com');
-      });
-
-      const req = httpMock.expectOne('/api/users?email=jane@example.com');
-      expect(req.request.method).toBe('GET');
-      req.flush(filteredUsers);
-    });
-
-    it('should return filtered users by role', () => {
-      const filter: UserFilter = {
-        role: 'admin'
-      };
-
-      const filteredUsers = [mockUsers[0]];
-
-      service.getUsers(filter).subscribe(users => {
-        expect(users).toEqual(filteredUsers);
-        expect(users.length).toBe(1);
-        expect(users[0].role).toBe('admin');
-      });
-
-      const req = httpMock.expectOne('/api/users?role=admin');
-      expect(req.request.method).toBe('GET');
-      req.flush(filteredUsers);
-    });
-
-    it('should return filtered users by active status', () => {
-      const filter: UserFilter = {
-        isActive: true
-      };
-
-      const filteredUsers = [mockUsers[0], mockUsers[2]];
-
-      service.getUsers(filter).subscribe(users => {
-        expect(users).toEqual(filteredUsers);
-        expect(users.length).toBe(2);
-        users.forEach(user => {
-          expect(user.isActive).toBe(true);
-        });
-      });
-
-      const req = httpMock.expectOne('/api/users?isActive=true');
-      expect(req.request.method).toBe('GET');
-      req.flush(filteredUsers);
-    });
-
-    it('should return filtered users by date range', () => {
-      const filter: UserFilter = {
-        createdAfter: new Date('2024-01-10'),
-        createdBefore: new Date('2024-01-20')
-      };
-
-      const filteredUsers = [mockUsers[1]];
-
-      service.getUsers(filter).subscribe(users => {
-        expect(users).toEqual(filteredUsers);
-        expect(users.length).toBe(1);
-      });
-
-      const req = httpMock.expectOne('/api/users?createdAfter=2024-01-10T00:00:00.000Z&createdBefore=2024-01-20T00:00:00.000Z');
-      expect(req.request.method).toBe('GET');
-      req.flush(filteredUsers);
-    });
-
-    it('should return filtered users with multiple criteria', () => {
-      const filter: UserFilter = {
-        role: 'user',
-        isActive: false,
-        name: 'Jane'
-      };
-
-      const filteredUsers = [mockUsers[1]];
-
-      service.getUsers(filter).subscribe(users => {
-        expect(users).toEqual(filteredUsers);
-        expect(users.length).toBe(1);
-      });
-
-      const req = httpMock.expectOne('/api/users?role=user&isActive=false&name=Jane');
-      expect(req.request.method).toBe('GET');
-      req.flush(filteredUsers);
-    });
-
-    it('should handle empty filter results', () => {
-      const filter: UserFilter = {
-        name: 'NonExistentUser'
+        search: 'John',
+        role: 'admin',
+        status: 'active',
+        department: 'IT'
       };
 
       service.getUsers(filter).subscribe(users => {
-        expect(users).toEqual([]);
-        expect(users.length).toBe(0);
+        expect(users).toEqual([mockUsers[0]]);
       });
 
-      const req = httpMock.expectOne('/api/users?name=NonExistentUser');
+      const req = httpMock.expectOne('/api/users?search=John&role=admin&status=active&department=IT');
       expect(req.request.method).toBe('GET');
-      req.flush([]);
+      req.flush([mockUsers[0]]);
     });
 
-    it('should handle HTTP error', () => {
+    it('should handle partial filters', () => {
       const filter: UserFilter = {
-        name: 'John'
+        role: 'user'
       };
 
-      service.getUsers(filter).subscribe({
+      service.getUsers(filter).subscribe();
+
+      const req = httpMock.expectOne('/api/users?role=user');
+      expect(req.request.method).toBe('GET');
+      req.flush([mockUsers[1]]);
+    });
+
+    it('should handle empty string filters by excluding them from query', () => {
+      const filter: UserFilter = {
+        search: '',
+        role: 'admin',
+        status: '',
+        department: 'IT'
+      };
+
+      service.getUsers(filter).subscribe();
+
+      const req = httpMock.expectOne('/api/users?role=admin&department=IT');
+      expect(req.request.method).toBe('GET');
+      req.flush([mockUsers[0]]);
+    });
+
+    it('should handle HTTP errors', () => {
+      service.getUsers().subscribe({
         next: () => fail('should have failed with 500 error'),
         error: (error) => {
           expect(error.status).toBe(500);
         }
       });
 
-      const req = httpMock.expectOne('/api/users?name=John');
-      req.flush('Server Error', { status: 500, statusText: 'Internal Server Error' });
+      const req = httpMock.expectOne('/api/users');
+      req.flush('Internal Server Error', { status: 500, statusText: 'Internal Server Error' });
     });
   });
 
   describe('getUserById', () => {
-    it('should return user by id', () => {
+    it('should return a specific user', () => {
       const userId = '1';
-      const expectedUser = mockUsers[0];
 
       service.getUserById(userId).subscribe(user => {
-        expect(user).toEqual(expectedUser);
+        expect(user).toEqual(mockUsers[0]);
       });
 
       const req = httpMock.expectOne(`/api/users/${userId}`);
       expect(req.request.method).toBe('GET');
-      req.flush(expectedUser);
+      req.flush(mockUsers[0]);
     });
 
     it('should handle user not found', () => {
-      const userId = '999';
+      const userId = 'nonexistent';
 
       service.getUserById(userId).subscribe({
         next: () => fail('should have failed with 404 error'),
@@ -236,20 +152,36 @@ describe('UserService', () => {
     });
   });
 
-  describe('createUser', () => {
-    it('should create a new user', () => {
-      const newUser: Omit<User, 'id' | 'createdAt'> = {
-        name: 'New User',
-        email: 'newuser@example.com',
-        role: 'user',
-        isActive: true
+  describe('getFilterOptions', () => {
+    it('should return available filter options', () => {
+      const expectedOptions = {
+        roles: ['admin', 'user', 'moderator'],
+        statuses: ['active', 'inactive'],
+        departments: ['IT', 'HR', 'Finance']
       };
 
-      const createdUser: User = {
-        ...newUser,
-        id: '4',
-        createdAt: new Date()
+      service.getFilterOptions().subscribe(options => {
+        expect(options).toEqual(expectedOptions);
+      });
+
+      const req = httpMock.expectOne('/api/users/filter-options');
+      expect(req.request.method).toBe('GET');
+      req.flush(expectedOptions);
+    });
+  });
+
+  describe('createUser', () => {
+    it('should create a new user', () => {
+      const newUser: Omit<User, 'id'> = {
+        name: 'New User',
+        email: 'new@example.com',
+        role: 'user',
+        status: 'active',
+        createdAt: new Date(),
+        department: 'Finance'
       };
+
+      const createdUser: User = { id: '4', ...newUser };
 
       service.createUser(newUser).subscribe(user => {
         expect(user).toEqual(createdUser);
@@ -260,21 +192,41 @@ describe('UserService', () => {
       expect(req.request.body).toEqual(newUser);
       req.flush(createdUser);
     });
+
+    it('should handle creation errors', () => {
+      const newUser: Omit<User, 'id'> = {
+        name: '',
+        email: 'invalid-email',
+        role: 'user',
+        status: 'active',
+        createdAt: new Date(),
+        department: 'Finance'
+      };
+
+      service.createUser(newUser).subscribe({
+        next: () => fail('should have failed with validation error'),
+        error: (error) => {
+          expect(error.status).toBe(400);
+        }
+      });
+
+      const req = httpMock.expectOne('/api/users');
+      req.flush('Validation failed', { status: 400, statusText: 'Bad Request' });
+    });
   });
 
   describe('updateUser', () => {
     it('should update an existing user', () => {
-      const userId = '1';
       const updatedUser: User = {
         ...mockUsers[0],
-        name: 'Updated Name'
+        name: 'John Updated'
       };
 
-      service.updateUser(userId, updatedUser).subscribe(user => {
+      service.updateUser(updatedUser).subscribe(user => {
         expect(user).toEqual(updatedUser);
       });
 
-      const req = httpMock.expectOne(`/api/users/${userId}`);
+      const req = httpMock.expectOne(`/api/users/${updatedUser.id}`);
       expect(req.request.method).toBe('PUT');
       expect(req.request.body).toEqual(updatedUser);
       req.flush(updatedUser);
@@ -286,44 +238,76 @@ describe('UserService', () => {
       const userId = '1';
 
       service.deleteUser(userId).subscribe(response => {
-        expect(response).toEqual({ success: true });
+        expect(response).toBeUndefined();
       });
 
       const req = httpMock.expectOne(`/api/users/${userId}`);
       expect(req.request.method).toBe('DELETE');
-      req.flush({ success: true });
+      req.flush(null);
     });
   });
 
-  describe('getFilteredUsersCount', () => {
-    it('should return count of filtered users', () => {
+  describe('error handling', () => {
+    it('should handle network errors', () => {
+      const errorEvent = new ErrorEvent('Network error');
+
+      service.getUsers().subscribe({
+        next: () => fail('should have failed with network error'),
+        error: (error) => {
+          expect(error).toBeDefined();
+        }
+      });
+
+      const req = httpMock.expectOne('/api/users');
+      req.error(errorEvent);
+    });
+  });
+
+  describe('filter validation', () => {
+    it('should handle null filter values', () => {
       const filter: UserFilter = {
-        isActive: true
+        search: null as any,
+        role: undefined as any,
+        status: 'active'
       };
 
-      const expectedCount = { count: 2 };
+      service.getUsers(filter).subscribe();
 
-      service.getFilteredUsersCount(filter).subscribe(result => {
-        expect(result).toEqual(expectedCount);
-      });
-
-      const req = httpMock.expectOne('/api/users/count?isActive=true');
+      const req = httpMock.expectOne('/api/users?status=active');
       expect(req.request.method).toBe('GET');
-      req.flush(expectedCount);
+      req.flush(mockUsers);
+    });
+
+    it('should encode special characters in filter values', () => {
+      const filter: UserFilter = {
+        search: 'test@domain.com',
+        department: 'R&D'
+      };
+
+      service.getUsers(filter).subscribe();
+
+      const req = httpMock.expectOne('/api/users?search=test%40domain.com&department=R%26D');
+      expect(req.request.method).toBe('GET');
+      req.flush(mockUsers);
     });
   });
 
-  describe('getRoles', () => {
-    it('should return available user roles', () => {
-      const expectedRoles = ['admin', 'moderator', 'user'];
+  describe('performance considerations', () => {
+    it('should handle large result sets', () => {
+      const largeUserSet = Array.from({ length: 1000 }, (_, i) => ({
+        ...mockUsers[0],
+        id: i.toString(),
+        name: `User ${i}`
+      }));
 
-      service.getRoles().subscribe(roles => {
-        expect(roles).toEqual(expectedRoles);
+      service.getUsers().subscribe(users => {
+        expect(users.length).toBe(1000);
+        expect(users[0].name).toBe('User 0');
+        expect(users[999].name).toBe('User 999');
       });
 
-      const req = httpMock.expectOne('/api/users/roles');
-      expect(req.request.method).toBe('GET');
-      req.flush(expectedRoles);
+      const req = httpMock.expectOne('/api/users');
+      req.flush(largeUserSet);
     });
   });
 });
