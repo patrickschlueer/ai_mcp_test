@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { checkAndResetParentTask } from '../shared-utils/subtask-coordinator.js';
 
 dotenv.config();
 
@@ -11,6 +12,7 @@ dotenv.config();
  * ✅ Analysiert Code und erstellt Architektur-Design
  * ✅ 3 Iterationen: Selbst-Review & Verbesserung
  * ✅ Dokumentiert finale Erkenntnisse im Parent-Task
+ * ✅ Prüft ob ALLE Agent Sub-Tasks fertig sind (flexibel 1-N) → Reset Parent zu "To Do"
  * 
  * 🛠️ TECH STACK:
  * - Frontend: Angular (eigenes CSS, kein Material!)
@@ -436,9 +438,9 @@ Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iterati
   }
 
   /**
-   * Setze Sub-Task auf "Fertig"
+   * Setze Sub-Task auf "Fertig" und prüfe ob beide Sub-Tasks fertig sind
    */
-  async completeSubTask(subTask) {
+  async completeSubTask(subTask, parentTaskKey) {
     console.log(`\n${this.emoji} Completing sub-task...`);
     
     await this.callMCPTool('jira', 'update_ticket', {
@@ -459,6 +461,30 @@ Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iterati
     });
     
     console.log(`   ✅ Sub-task completed and set to Done`);
+    
+    // 🎯 NEU: Prüfe ob ALLE Sub-Tasks fertig sind → Reset Parent zu "To Do"
+    const result = await checkAndResetParentTask(
+      (toolName, params) => this.callMCPTool('jira', toolName, params),
+      parentTaskKey,
+      subTask.key,
+      this.emoji
+    );
+    
+    if (result.allComplete && result.parentUpdated) {
+      console.log(`   🎉 All ${result.completedCount} sub-task(s) complete! Parent ${parentTaskKey} reset to "To Do"`);
+      console.log(`   📋 ${result.summary}`);
+      
+      await this.sendEvent({
+        type: 'parent_task_ready_for_implementation',
+        message: `All sub-tasks complete - Parent ${parentTaskKey} ready for coding`,
+        details: JSON.stringify({
+          parentKey: parentTaskKey,
+          completedSubTasks: result.completedCount,
+          summary: result.summary
+        }),
+        activity: `✅ Parent ${parentTaskKey} ready for implementation`
+      });
+    }
   }
 
   extractTextFromCommentADF(adf) {
@@ -580,13 +606,13 @@ Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iterati
       
       await this.documentInParentTask(parentTask, currentArchitecture);
 
-      // 6. Complete Sub-Task
+      // 6. Complete Sub-Task (inkl. Prüfung ob beide Sub-Tasks fertig)
       await this.sendEvent({
         type: 'completing_subtask',
         message: `Completing sub-task ${subTask.key}`,
         activity: `✅ Completing ${subTask.key}`
       });
-      await this.completeSubTask(fullSubTask.ticket);
+      await this.completeSubTask(fullSubTask.ticket, parentTask.key);
 
       this.processedSubTasks.add(subTask.key);
       
