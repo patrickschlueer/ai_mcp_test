@@ -8,9 +8,8 @@ import { UserTableRowComponent } from '../user-table-row/user-table-row.componen
 /**
  * User List Component
  * 
- * Zeigt Liste aller Users in einer Tabelle an mit Filterung
+ * Zeigt Liste aller Users in einer Tabelle an mit Filterfunktionalität
  * Component Split: Verwendet UserTableRowComponent für einzelne Zeilen
- * Filter Features: Suche nach Name/Email, clientseitige Filterung
  */
 @Component({
   selector: 'app-user-list',
@@ -26,29 +25,14 @@ export class UserListComponent implements OnInit, OnDestroy {
   @Output() delete = new EventEmitter<string>();
   @Output() refresh = new EventEmitter<void>();
 
-  // Filter properties
   searchTerm: string = '';
   filteredUsers: User[] = [];
-  
-  // RxJS subjects for debounced search
   private searchSubject = new Subject<string>();
   private destroy$ = new Subject<void>();
 
   ngOnInit() {
-    // Setup debounced search
-    this.searchSubject
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        takeUntil(this.destroy$)
-      )
-      .subscribe(searchTerm => {
-        this.searchTerm = searchTerm;
-        this.filterUsers();
-      });
-
-    // Initial filter
-    this.filterUsers();
+    this.setupSearch();
+    this.filteredUsers = this.users;
   }
 
   ngOnDestroy() {
@@ -57,67 +41,53 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   ngOnChanges() {
-    // Re-filter when users input changes
     this.filterUsers();
   }
 
-  /**
-   * Filter users based on search term
-   * Searches in name and email fields (case-insensitive)
-   */
-  filterUsers() {
-    if (!this.users) {
-      this.filteredUsers = [];
-      return;
-    }
-
-    if (!this.searchTerm || this.searchTerm.trim() === '') {
-      this.filteredUsers = [...this.users];
-      return;
-    }
-
-    const term = this.searchTerm.toLowerCase().trim();
-    this.filteredUsers = this.users.filter(user => 
-      user.name.toLowerCase().includes(term) ||
-      user.email.toLowerCase().includes(term)
-    );
+  private setupSearch() {
+    this.searchSubject.pipe(
+      debounceTime(300),
+      distinctUntilChanged(),
+      takeUntil(this.destroy$)
+    ).subscribe((searchTerm) => {
+      this.searchTerm = searchTerm;
+      this.filterUsers();
+    });
   }
 
-  /**
-   * Handle search input with debouncing
-   */
   onSearchInput(event: Event) {
     const target = event.target as HTMLInputElement;
     this.searchSubject.next(target.value);
   }
 
-  /**
-   * Clear search filter
-   */
   clearSearch() {
     this.searchTerm = '';
     this.searchSubject.next('');
   }
 
-  /**
-   * Get filtered users count for display
-   */
+  private filterUsers() {
+    if (!this.searchTerm.trim()) {
+      this.filteredUsers = [...this.users];
+      return;
+    }
+
+    const searchLower = this.searchTerm.toLowerCase().trim();
+    this.filteredUsers = this.users.filter(user => 
+      user.name.toLowerCase().includes(searchLower) ||
+      user.email.toLowerCase().includes(searchLower)
+    );
+  }
+
   get filteredCount(): number {
     return this.filteredUsers.length;
   }
 
-  /**
-   * Get total users count for display
-   */
   get totalCount(): number {
     return this.users.length;
   }
 
-  /**
-   * Check if filter is active
-   */
   get isFiltered(): boolean {
-    return this.searchTerm.trim() !== '';
+    return this.searchTerm.trim().length > 0;
   }
 
   onEdit(user: User) {
