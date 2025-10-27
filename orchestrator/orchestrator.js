@@ -8,6 +8,8 @@ import { fileURLToPath } from 'url';
 import TechnicalProductOwnerAgent from '../agents/technical-product-owner/agent.js';
 import SoftwareArchitectAgent from '../agents/software-architect/agent.js';
 import UIDesignerAgent from '../agents/ui-designer/agent.js';
+import CoderAgent from '../agents/coder/agent.js';
+import ReviewAgent from '../agents/reviewer/agent.js';
 
 dotenv.config();
 
@@ -21,6 +23,8 @@ const __dirname = path.dirname(__filename);
  * - Tech PO Agent
  * - Software Architect Agent  
  * - UI Designer Agent
+ * - Coder Agent
+ * - Review Agent
  * 
  * Features:
  * - Ein Prozess für alle Agenten
@@ -105,6 +109,32 @@ class AgentOrchestrator {
       });
       console.log(`   ✅ Designer Agent ready`);
       
+      // 4. Coder Agent
+      console.log(`\n   👨‍💻 Initializing Coder Agent...`);
+      const coder = new CoderAgent();
+      this.agents.set('coder', coder);
+      this.agentStatus.set('coder', {
+        name: 'Coder',
+        emoji: '👨‍💻',
+        status: 'idle',
+        lastActive: new Date().toISOString(),
+        tasksProcessed: 0
+      });
+      console.log(`   ✅ Coder Agent ready`);
+      
+      // 5. Review Agent
+      console.log(`\n   🔍 Initializing Review Agent...`);
+      const reviewer = new ReviewAgent();
+      this.agents.set('reviewer', reviewer);
+      this.agentStatus.set('reviewer', {
+        name: 'Review Agent',
+        emoji: '🔍',
+        status: 'idle',
+        lastActive: new Date().toISOString(),
+        tasksProcessed: 0
+      });
+      console.log(`   ✅ Review Agent ready`);
+      
       console.log(`\n${this.emoji} ✅ All ${this.agents.size} agents initialized!`);
       
     } catch (error) {
@@ -167,7 +197,13 @@ class AgentOrchestrator {
         this.runDesignerCycle()
       ]);
       
-      // 4. Status Summary
+      // 4. Coder Agent: Process ready tickets
+      await this.runCoderCycle();
+      
+      // 5. Review Agent: Review PRs
+      await this.runReviewCycle();
+      
+      // 6. Status Summary
       this.printStatusSummary();
       
     } catch (error) {
@@ -296,6 +332,68 @@ class AgentOrchestrator {
     } catch (error) {
       console.error(`   ❌ Error:`, error.message);
       this.updateAgentStatus('designer', 'error');
+    }
+  }
+
+  /**
+   * Coder: Process ready tickets
+   */
+  async runCoderCycle() {
+    console.log(`\n👨‍💻 Coder: Checking for ready tickets...`);
+    const agent = this.agents.get('coder');
+    
+    try {
+      this.updateAgentStatus('coder', 'active');
+      
+      const tickets = await agent.getReadyForDevelopmentTickets();
+      
+      if (tickets.length > 0) {
+        console.log(`   Found ${tickets.length} ready ticket(s)`);
+        
+        for (const ticket of tickets) {
+          await agent.processTicket(ticket);
+          this.updateAgentStatus('coder', 'active', { tasksProcessed: 1 });
+        }
+      } else {
+        console.log(`   No ready tickets`);
+      }
+      
+      this.updateAgentStatus('coder', 'idle');
+      
+    } catch (error) {
+      console.error(`   ❌ Error:`, error.message);
+      this.updateAgentStatus('coder', 'error');
+    }
+  }
+
+  /**
+   * Review: Process pull requests
+   */
+  async runReviewCycle() {
+    console.log(`\n🔍 Review: Checking for open PRs...`);
+    const agent = this.agents.get('reviewer');
+    
+    try {
+      this.updateAgentStatus('reviewer', 'active');
+      
+      const prs = await agent.getOpenPullRequests();
+      
+      if (prs.length > 0) {
+        console.log(`   Found ${prs.length} PR(s) to review`);
+        
+        for (const pr of prs) {
+          await agent.processPR(pr);
+          this.updateAgentStatus('reviewer', 'active', { tasksProcessed: 1 });
+        }
+      } else {
+        console.log(`   No open PRs`);
+      }
+      
+      this.updateAgentStatus('reviewer', 'idle');
+      
+    } catch (error) {
+      console.error(`   ❌ Error:`, error.message);
+      this.updateAgentStatus('reviewer', 'error');
     }
   }
 

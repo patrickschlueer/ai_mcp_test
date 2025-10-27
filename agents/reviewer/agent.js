@@ -99,8 +99,10 @@ class ReviewAgent {
 
       if (!result.success) return [];
 
+
       // Filter PRs die vom Coder erstellt wurden und noch nicht reviewed
       const prsToReview = result.pullRequests.filter(pr => {
+        console.log('Found PR:', pr);
         const createdByCoder = pr.body?.includes('Created by 👨‍💻 Coder Agent');
         const notReviewed = !this.reviewedPRs.has(pr.number);
         const notApproved = !pr.body?.includes('✅ Approved by 🔍 Review Agent');
@@ -124,15 +126,35 @@ class ReviewAgent {
     console.log(`\n${this.emoji} Getting PR details...`);
     
     try {
-      const result = await this.callMCPTool('github', 'get_pull_request', {
+      // 1. Hole PR Basis-Details
+      const prResult = await this.callMCPTool('github', 'get_pull_request', {
         prNumber
       });
 
-      if (result.success) {
-        console.log(`   ✅ PR #${prNumber}: ${result.pullRequest.title}`);
-        console.log(`   📝 ${result.pullRequest.files?.length || 0} file(s) changed`);
-        return result.pullRequest;
+      if (!prResult.success) {
+        throw new Error(prResult.error || 'Failed to get PR details');
       }
+
+      // 2. Hole PR Files (Changed Files)
+      const filesResult = await this.callMCPTool('github', 'get_pull_request_files', {
+        prNumber
+      });
+
+      if (!filesResult.success) {
+        console.warn(`   ⚠️  Could not get PR files: ${filesResult.error}`);
+      }
+
+      // Combine PR details with files
+      const fullPR = {
+        ...prResult.pr,
+        files: filesResult.success ? filesResult.files : []
+      };
+
+      console.log(`   ✅ PR #${prNumber}: ${fullPR.title}`);
+      console.log(`   📝 ${fullPR.files.length} file(s) changed`);
+      
+      return fullPR;
+      
     } catch (error) {
       console.error(`   ❌ Failed to get PR details: ${error.message}`);
       throw error;

@@ -296,6 +296,96 @@ class GitHubClient {
   }
 
   /**
+   * Pull Requests abrufen (Liste)
+   */
+  async getPullRequests(state = 'open', limit = 30) {
+    try {
+      console.log(`[GitHubClient] Getting pull requests (state: ${state})`);
+      
+      const { data } = await this.octokit.rest.pulls.list({
+        owner: this.owner,
+        repo: this.repo,
+        state: state, // 'open', 'closed', 'all'
+        per_page: limit,
+        sort: 'created',
+        direction: 'desc'
+      });
+
+      const pullRequests = data.map(pr => ({
+        number: pr.number,
+        title: pr.title,
+        body: pr.body || '',
+        state: pr.state,
+        url: pr.html_url,
+        headBranch: pr.head.ref,
+        baseBranch: pr.base.ref,
+        author: pr.user.login,
+        createdAt: pr.created_at,
+        updatedAt: pr.updated_at,
+        mergeable: pr.mergeable,
+        merged: pr.merged,
+        draft: pr.draft
+      }));
+
+      return {
+        success: true,
+        pullRequests: pullRequests,
+        count: pullRequests.length
+      };
+    } catch (error) {
+      console.error(`[GitHubClient] Error getting pull requests:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 🆕 Einzelnen Pull Request abrufen (mit Details)
+   */
+  async getPullRequest(prNumber) {
+    try {
+      console.log(`[GitHubClient] Getting pull request #${prNumber}`);
+      
+      const { data } = await this.octokit.rest.pulls.get({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber
+      });
+
+      return {
+        success: true,
+        pr: {
+          number: data.number,
+          title: data.title,
+          body: data.body || '',
+          state: data.state,
+          url: data.html_url,
+          headBranch: data.head.ref,
+          baseBranch: data.base.ref,
+          author: data.user.login,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+          mergeable: data.mergeable,
+          merged: data.merged,
+          draft: data.draft,
+          commits: data.commits,
+          additions: data.additions,
+          deletions: data.deletions,
+          changedFiles: data.changed_files
+        }
+      };
+    } catch (error) {
+      console.error(`[GitHubClient] Error getting pull request #${prNumber}:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Alle Branches abrufen
    */
   async getBranches() {
@@ -354,6 +444,108 @@ class GitHubClient {
       };
     } catch (error) {
       console.error(`[GitHubClient] Error getting commits:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 🆕 PR Files (Changed Files) abrufen
+   */
+  async getPullRequestFiles(prNumber) {
+    try {
+      console.log(`[GitHubClient] Getting files for PR #${prNumber}`);
+      
+      const { data } = await this.octokit.rest.pulls.listFiles({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber
+      });
+
+      const files = data.map(file => ({
+        filename: file.filename,
+        status: file.status, // 'added', 'removed', 'modified', 'renamed'
+        additions: file.additions,
+        deletions: file.deletions,
+        changes: file.changes,
+        patch: file.patch, // Diff
+        blobUrl: file.blob_url,
+        rawUrl: file.raw_url
+      }));
+
+      return {
+        success: true,
+        files: files
+      };
+    } catch (error) {
+      console.error(`[GitHubClient] Error getting PR files:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 🆕 Kommentar zu PR hinzufügen
+   */
+  async addPRComment(prNumber, comment) {
+    try {
+      console.log(`[GitHubClient] Adding comment to PR #${prNumber}`);
+      
+      const { data } = await this.octokit.rest.issues.createComment({
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: prNumber, // PRs sind Issues in GitHub API
+        body: comment
+      });
+
+      return {
+        success: true,
+        comment: {
+          id: data.id,
+          body: data.body,
+          author: data.user.login,
+          createdAt: data.created_at,
+          url: data.html_url
+        }
+      };
+    } catch (error) {
+      console.error(`[GitHubClient] Error adding PR comment:`, error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 🆕 PR approven (Review mit approve status)
+   */
+  async approvePullRequest(prNumber) {
+    try {
+      console.log(`[GitHubClient] Approving PR #${prNumber}`);
+      
+      const { data } = await this.octokit.rest.pulls.createReview({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        event: 'APPROVE'
+      });
+
+      return {
+        success: true,
+        review: {
+          id: data.id,
+          state: data.state,
+          submittedAt: data.submitted_at,
+          url: data.html_url
+        }
+      };
+    } catch (error) {
+      console.error(`[GitHubClient] Error approving PR:`, error.message);
       return {
         success: false,
         error: error.message

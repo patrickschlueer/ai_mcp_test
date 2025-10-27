@@ -335,27 +335,9 @@ Antworte NUR mit JSON:
         continue;
       }
       
-      // Skip wenn bereits in processedTickets
-      if (this.processedTickets.has(`${ticket.key}-finalized`)) {
+      // 👉 Skip nur wenn bereits in diesem Zyklus verarbeitet
+      if (this.processedTickets.has(`${ticket.key}-finalized-this-cycle`)) {
         continue;
-      }
-      
-      // 🆕 NEU: Prüfe ob bereits ein "Ticket finalisiert!" Kommentar existiert
-      const fullTicket = await this.callMCPTool('jira', 'get_ticket', { ticketKey: ticket.key });
-      
-      if (fullTicket.success && fullTicket.ticket.comments) {
-        const hasFinalizationComment = fullTicket.ticket.comments.some(comment => {
-          let bodyText = '';
-          if (typeof comment.body === 'string') bodyText = comment.body;
-          else if (comment.body?.content) bodyText = this.extractTextFromCommentADF(comment.body);
-          return bodyText.includes(this.emoji) && bodyText.includes('Ticket finalisiert!');
-        });
-        
-        if (hasFinalizationComment) {
-          console.log(`   ⏭️  ${ticket.key} already finalized - skipping`);
-          this.processedTickets.add(`${ticket.key}-finalized`); // Für diese Session merken
-          continue;
-        }
       }
       
       ticketsToCheck.push(ticket);
@@ -1085,6 +1067,27 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
       comment: finalComment
     });
     
+    // 🔥 Setze Status basierend auf Sub-Tasks
+    if (agentNeeds.needsArchitect || agentNeeds.needsDesigner) {
+      // Wenn Sub-Tasks erstellt wurden -> "Genehmigt" (wartet auf Sub-Tasks)
+      await this.callMCPTool('jira', 'update_ticket', {
+        ticketKey: ticket.key,
+        updates: {
+          status: 'Genehmigt'
+        }
+      });
+      console.log(`   ✅ Status set to 'Genehmigt' - waiting for sub-tasks`);
+    } else {
+      // Wenn KEINE Sub-Tasks -> direkt "To Do" (ready for Coder)
+      await this.callMCPTool('jira', 'update_ticket', {
+        ticketKey: ticket.key,
+        updates: {
+          status: 'To Do'
+        }
+      });
+      console.log(`   ✅ Status set to 'To Do' - ready for Coder`);
+    }
+    
     // 🔥 WICHTIG: Event senden dass Ticket finalisiert wurde
     await this.sendEvent({
       type: 'ticket_complete',
@@ -1152,7 +1155,7 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
       // 🔥 CRITICAL: Skip Sub-Tasks immediately!
       if (ticket.issueType === 'Sub-task') {
         console.log(`\n${this.emoji} ⚠️  Skipping Sub-Task ${ticket.key} - not for Tech PO!`);
-        this.processedTickets.add(`${ticket.key}-finalized`);
+        this.processedTickets.add(`${ticket.key}-finalized-this-cycle`);
         return { success: true, skipped: true, reason: 'Sub-task' };
       }
 
@@ -1176,7 +1179,9 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
 
       if (!agentComment) {
         console.log(`   ⚠️  No agent analysis comment found`);
-        this.processedTickets.add(`${ticket.key}-finalized`);
+        console.log(`   → Ticket was finalized without standard analysis flow`);
+        console.log(`   → Will be checked in checkReadyForDevelopment() instead`);
+        // NICHT als finalized-this-cycle markieren, damit checkReadyForDevelopment() es findet!
         return { success: true, skipped: true };
       }
 
@@ -1225,7 +1230,7 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
         const codeContext = await this.gatherCodeContext(ticket);
         
         await this.finalizeTicket(ticket, originalAnalysis, {}, codeContext.relevantFiles);
-        this.processedTickets.add(`${ticket.key}-finalized`);
+        this.processedTickets.add(`${ticket.key}-finalized-this-cycle`);
         return { success: true };
       }
 
@@ -1256,7 +1261,7 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
         const codeContext = await this.gatherCodeContext(ticket);
         
         await this.finalizeTicket(ticket, originalAnalysis, checkResult.answers, codeContext.relevantFiles);
-        this.processedTickets.add(`${ticket.key}-finalized`);
+        this.processedTickets.add(`${ticket.key}-finalized-this-cycle`);
         
         return { success: true, finalized: true };
       } else {
@@ -1316,10 +1321,144 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
     }
   }
 
+  /**
+   * 🆕 NEU: Prüfe finalisierte Tickets mit fertigen Sub-Tasks
+   */
+  async checkReadyForDevelopment() {
+    console.log(`\n${this.emoji} Checking for tickets ready for development...`);
+    
+    // 🔥 Hole ALLE Tickets mit Status "Approved" ODER "Genehmigt"
+    const statuses = ['Approved', 'Genehmigt'];
+    const allTickets = [];
+    
+    for (const status of statuses) {
+      const result = await this.callMCPTool('jira', 'get_tickets', {
+        status: status,
+        maxResults: 10
+      });
+      
+      if (result.success && result.tickets) {
+        allTickets.push(...result.tickets);
+      }
+    }
+    
+    console.log(`   Found ${allTickets.length} ticket(s) with status Approved/Genehmigt`);
+
+    for (const ticket of allTickets) {
+      // Skip Sub-Tasks
+      if (ticket.issueType === 'Sub-task' || ticket.issueType === 'Sub-Task') {
+        continue;
+      }
+
+      // Skip wenn bereits verarbeitet
+      if (this.processedTickets.has(`${ticket.key}-ready`)) {
+        continue;
+      }
+
+      // Hole vollständige Ticket-Details
+      const fullTicket = await this.callMCPTool('jira', 'get_ticket', { 
+        ticketKey: ticket.key 
+      });
+
+      if (!fullTicket.success) continue;
+      
+      // 🔥 Prüfe ob Ticket finalisiert wurde (hat "Ticket finalisiert!" Kommentar)
+      if (fullTicket.ticket.comments) {
+        const hasFinalizationComment = fullTicket.ticket.comments.some(comment => {
+          let bodyText = '';
+          if (typeof comment.body === 'string') bodyText = comment.body;
+          else if (comment.body?.content) bodyText = this.extractTextFromCommentADF(comment.body);
+          return bodyText.includes(this.emoji) && bodyText.includes('Ticket finalisiert!');
+        });
+        
+        if (!hasFinalizationComment) {
+          console.log(`   ⏭️  ${ticket.key} not finalized yet - skipping`);
+          continue;
+        }
+      } else {
+        console.log(`   ⏭️  ${ticket.key} has no comments - skipping`);
+        continue;
+      }
+
+      // Prüfe ob Sub-Tasks existieren
+      const subTasksResult = await this.callMCPTool('jira', 'get_tickets', {
+        status: 'all',
+        maxResults: 50
+      });
+
+      let allSubTasksDone = true;
+      let hasSubTasks = false;
+
+      if (subTasksResult.success) {
+        const subTasks = subTasksResult.tickets.filter(t => 
+          t.parentKey === ticket.key && 
+          (t.issueType === 'Sub-task' || t.issueType === 'Sub-Task')
+        );
+
+        if (subTasks.length > 0) {
+          hasSubTasks = true;
+          console.log(`   📑 ${ticket.key} has ${subTasks.length} sub-task(s)`);
+          
+          // Prüfe ob ALLE Sub-Tasks "Fertig" sind
+          allSubTasksDone = subTasks.every(st => 
+            st.status === 'Fertig' || st.status === 'Done'
+          );
+          
+          if (!allSubTasksDone) {
+            const pendingSubTasks = subTasks.filter(st => 
+              st.status !== 'Fertig' && st.status !== 'Done'
+            );
+            console.log(`   ⏳ ${ticket.key} has ${pendingSubTasks.length} pending sub-task(s):`);
+            pendingSubTasks.forEach(st => {
+              console.log(`      - ${st.key}: ${st.status}`);
+            });
+            continue;
+          }
+        }
+      }
+
+      // ✅ ALLE Sub-Tasks fertig (oder keine Sub-Tasks) - Ticket ist ready!
+      console.log(`\n${this.emoji} ✅ ${ticket.key} is ready for development!`);
+      console.log(`   Sub-Tasks: ${hasSubTasks ? 'All completed' : 'None'}`);
+      
+      // Setze Status auf "To Do"
+      await this.callMCPTool('jira', 'update_ticket', {
+        ticketKey: ticket.key,
+        updates: {
+          status: 'To Do'
+        }
+      });
+
+      // Poste Kommentar
+      const readyComment = `${this.emoji} *Bereit für Entwicklung!*\n\n✅ Alle Vorarbeiten abgeschlossen\n${hasSubTasks ? `✅ Alle Sub-Tasks (Architekt/Designer) fertig\n` : ''}👨‍💻 Das Ticket kann jetzt vom Coder Agent implementiert werden\n\n---\n_Status geändert: ${ticket.status} → To Do_\n_${new Date().toISOString()}_`;
+      
+      await this.callMCPTool('jira', 'add_comment', {
+        ticketKey: ticket.key,
+        comment: readyComment
+      });
+
+      // Event senden
+      await this.sendEvent({
+        type: 'ticket_ready_for_development',
+        message: `Ticket ${ticket.key} ready for Coder Agent`,
+        details: JSON.stringify({
+          ticketKey: ticket.key,
+          hasSubTasks,
+          allSubTasksDone: true
+        }),
+        activity: `🚀 ${ticket.key} ready for development`
+      });
+
+      this.processedTickets.add(`${ticket.key}-ready`);
+      
+      console.log(`   ✅ ${ticket.key} moved to 'To Do' for Coder Agent`);
+    }
+  }
+
   async run(intervalSeconds = 30) {
     console.log(`\n${'='.repeat(60)}`);
     console.log(`${this.emoji} ${this.name} started!`);
-    console.log(`   Workflow: To Do → Analyze → Approved → Finalize`);
+    console.log(`   Workflow: To Do → Analyze → Approved → Finalize → Check Ready`);
     console.log(`${'='.repeat(60)}`);
 
     await this.loadAgentDocumentation();
@@ -1337,6 +1476,9 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
         for (const ticket of approvedTickets) {
           await this.processApprovedTicket(ticket);
         }
+
+        // 🆕 3. Check for finalized tickets with completed sub-tasks
+        await this.checkReadyForDevelopment();
 
         if (newTickets.length === 0 && approvedTickets.length === 0) {
           await this.sendEvent({ 

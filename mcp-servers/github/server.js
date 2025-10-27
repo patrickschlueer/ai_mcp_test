@@ -434,6 +434,180 @@ app.post('/tools/get_commits', async (req, res) => {
   }
 });
 
+/**
+ * 🆕 Tool: get_pull_requests
+ */
+app.post('/tools/get_pull_requests', async (req, res) => {
+  try {
+    console.log('[MCP Tool] get_pull_requests called');
+    const { state, limit } = req.body;
+    const result = await github.getPullRequests(state || 'open', limit || 30);
+    res.json(result);
+  } catch (error) {
+    console.error('[MCP Tool] Error in get_pull_requests:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 🆕 Tool: get_pull_request (single PR with details)
+ */
+app.post('/tools/get_pull_request', async (req, res) => {
+  try {
+    console.log('[MCP Tool] get_pull_request called');
+    const { prNumber } = req.body;
+    
+    if (!prNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'prNumber is required'
+      });
+    }
+    
+    await sendEvent({
+      type: 'get_pr',
+      message: `Getting PR #${prNumber}`
+    });
+    
+    const result = await github.getPullRequest(prNumber);
+    
+    if (result.success) {
+      await sendEvent({
+        type: 'pr_fetched',
+        message: `Fetched PR #${prNumber}: ${result.pr.title}`
+      });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('[MCP Tool] Error in get_pull_request:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 🆕 Tool: get_pull_request_files
+ */
+app.post('/tools/get_pull_request_files', async (req, res) => {
+  try {
+    console.log('[MCP Tool] get_pull_request_files called');
+    const { prNumber } = req.body;
+    
+    if (!prNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'prNumber is required'
+      });
+    }
+    
+    await sendEvent({
+      type: 'get_pr_files',
+      message: `Getting files for PR #${prNumber}`
+    });
+    
+    const result = await github.getPullRequestFiles(prNumber);
+    
+    if (result.success) {
+      await sendEvent({
+        type: 'pr_files_fetched',
+        message: `Fetched ${result.files.length} file(s) for PR #${prNumber}`
+      });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('[MCP Tool] Error in get_pull_request_files:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 🆕 Tool: add_pr_comment
+ */
+app.post('/tools/add_pr_comment', async (req, res) => {
+  try {
+    console.log('[MCP Tool] add_pr_comment called');
+    const { prNumber, comment } = req.body;
+    
+    if (!prNumber || !comment) {
+      return res.status(400).json({
+        success: false,
+        error: 'prNumber and comment are required'
+      });
+    }
+    
+    await sendEvent({
+      type: 'add_pr_comment',
+      message: `Adding comment to PR #${prNumber}`
+    });
+    
+    const result = await github.addPRComment(prNumber, comment);
+    
+    if (result.success) {
+      await sendEvent({
+        type: 'pr_comment_added',
+        message: `Added comment to PR #${prNumber}`
+      });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('[MCP Tool] Error in add_pr_comment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 🆕 Tool: approve_pull_request
+ */
+app.post('/tools/approve_pull_request', async (req, res) => {
+  try {
+    console.log('[MCP Tool] approve_pull_request called');
+    const { prNumber } = req.body;
+    
+    if (!prNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'prNumber is required'
+      });
+    }
+    
+    await sendEvent({
+      type: 'approve_pr',
+      message: `Approving PR #${prNumber}`
+    });
+    
+    const result = await github.approvePullRequest(prNumber);
+    
+    if (result.success) {
+      await sendEvent({
+        type: 'pr_approved',
+        message: `Approved PR #${prNumber}`
+      });
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('[MCP Tool] Error in approve_pull_request:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ============================================
 // MCP TOOL CATALOG
 // ============================================
@@ -521,6 +695,48 @@ app.get('/tools', (req, res) => {
           limit: { type: 'number', optional: true, description: 'Max number of commits (default: 10)' }
         },
         endpoint: '/tools/get_commits'
+      },
+      {
+        name: 'get_pull_requests',
+        description: 'Get pull requests from repository',
+        parameters: {
+          state: { type: 'string', optional: true, description: 'PR state: open, closed, or all (default: open)' },
+          limit: { type: 'number', optional: true, description: 'Max number of PRs (default: 30)' }
+        },
+        endpoint: '/tools/get_pull_requests'
+      },
+      {
+        name: 'get_pull_request',
+        description: 'Get a single pull request with full details',
+        parameters: {
+          prNumber: { type: 'number', required: true, description: 'Pull request number' }
+        },
+        endpoint: '/tools/get_pull_request'
+      },
+      {
+        name: 'get_pull_request_files',
+        description: 'Get changed files in a pull request',
+        parameters: {
+          prNumber: { type: 'number', required: true, description: 'Pull request number' }
+        },
+        endpoint: '/tools/get_pull_request_files'
+      },
+      {
+        name: 'add_pr_comment',
+        description: 'Add a comment to a pull request',
+        parameters: {
+          prNumber: { type: 'number', required: true, description: 'Pull request number' },
+          comment: { type: 'string', required: true, description: 'Comment text (markdown supported)' }
+        },
+        endpoint: '/tools/add_pr_comment'
+      },
+      {
+        name: 'approve_pull_request',
+        description: 'Approve a pull request',
+        parameters: {
+          prNumber: { type: 'number', required: true, description: 'Pull request number' }
+        },
+        endpoint: '/tools/approve_pull_request'
       }
     ]
   });

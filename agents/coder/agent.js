@@ -209,35 +209,28 @@ class CoderAgent {
   async createFeatureBranch(ticket) {
     console.log(`\n${this.emoji} Creating feature branch...`);
     
-    // Branch-Name: feature/AT-123-short-description
-    const shortDesc = ticket.summary
+    const branchName = `feature/${ticket.key}-${ticket.summary
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .substring(0, 50);
-    
-    const branchName = `feature/${ticket.key}-${shortDesc}`;
+      .substring(0, 50)}`;
     
     await this.sendEvent({
       type: 'branch_created',
       message: `Creating branch: ${branchName}`,
-      details: `For ticket ${ticket.key}`,
-      activity: `🌿 Creating branch`
+      activity: `🌿 Creating ${branchName}`
     });
-
-    try {
-      const result = await this.callMCPTool('github', 'create_branch', {
-        branchName,
-        fromBranch: 'main'
-      });
-
-      if (result.success) {
-        this.currentBranch = branchName;
-        console.log(`   ✅ Branch created: ${branchName}`);
-        return branchName;
-      }
-    } catch (error) {
-      console.error(`   ❌ Failed to create branch: ${error.message}`);
-      throw error;
+    
+    const result = await this.callMCPTool('github', 'create_branch', {
+      branchName: branchName,
+      fromBranch: 'main'
+    });
+    
+    if (result.success) {
+      console.log(`   ✅ Branch created: ${branchName}`);
+      this.currentBranch = branchName;
+      return branchName;
+    } else {
+      throw new Error(`Failed to create branch: ${result.error}`);
     }
   }
 
@@ -296,96 +289,132 @@ class CoderAgent {
   }
 
   /**
-   * Implementiere die Code-Änderungen
+   * SCHRITT 1: Plane welche Files geändert werden müssen
    */
-  async implementChanges(ticket, context) {
-    console.log(`\n${this.emoji} Implementing changes...`);
+  async planImplementation(ticket, context) {
+    console.log(`\n${this.emoji} Planning implementation...`);
     
-    await this.sendEvent({
-      type: 'coding',
-      message: `Implementing ${ticket.key}`,
-      details: `Working on ${context.files.length} files`,
-      activity: `⚙️ Coding ${ticket.key}`
-    });
-
-    // Erstelle Code-Context für Claude
-    let codeContext = '=== EXISTING CODE ===\n\n';
-    for (const file of context.files) {
-      codeContext += `━━━ ${file.path} ━━━\n${file.content}\n\n`;
-    }
-
-    const prompt = `Du bist ein Senior Full-Stack Developer. Implementiere die folgenden Anforderungen.
+    const prompt = `Du bist ein Senior Full-Stack Developer. Analysiere die Anforderungen und erstelle einen Implementierungsplan.
 
 === TICKET ===
 ${ticket.key}: ${ticket.summary}
-${ticket.description || ''}
+${ticket.description ? ticket.description.substring(0, 2000) : ''}
 
-=== ARCHITEKTUR-DESIGN ===
-${context.architecture || 'Keine spezielle Architektur vorgegeben'}
-
-=== UI-DESIGN SPEZIFIKATION ===
-${context.uiDesign || 'Keine spezielle UI-Vorgaben'}
-
-${codeContext}
+=== EXISTING FILES ===
+${context.files.map(f => `- ${f.path} (${f.size} bytes)`).join('\n')}
 
 === TECH STACK CONSTRAINTS ===
-⚠️ KRITISCH - Du MUSST dich an folgende Technologie-Vorgaben halten:
-
-**Frontend:**
-- Angular (kein React, Vue, etc.)
-- Custom CSS (KEIN Angular Material, Bootstrap, Tailwind, etc.!)
-- Schreibe eigene CSS-Styles von Grund auf
-
-**Backend:**
-- Node.js
-- Express (falls nötig)
-- KEINE zusätzlichen Frameworks
-
-**Datenbank:**
-- In-Memory Node.js (einfaches Array/Object)
-- KEINE echte Datenbank (MongoDB, PostgreSQL, etc.)
-- Es sei denn, das Ticket erwähnt explizit eine DB-Migration
-
-**3rd Party Libraries:**
-- KEINE zusätzlichen npm packages installieren
-- KEINE externen Libraries verwenden
-- Nur eingebaute Node.js/Angular Module
-- Ausnahme: Nur wenn der TPO es EXPLIZIT im Ticket angewiesen hat!
+- Frontend: Angular (Custom CSS, NO frameworks!)
+- Backend: Node.js
+- Database: In-Memory
+- 3rd Party: NONE
 
 === AUFGABE ===
-Implementiere die Anforderungen aus dem Ticket. Beachte:
+Erstelle einen Implementierungsplan. Welche Files müssen geändert werden?
 
-1. **Folge dem Architektur-Design** (falls vorhanden)
-2. **Folge der UI-Design Spezifikation** (falls vorhanden)
-3. **Halte dich STRIKT an den Tech Stack** (siehe oben!)
-4. **Halte dich an den bestehenden Code-Stil**
-5. **Schreibe sauberen, wartbaren Code**
-6. **Füge Kommentare für komplexe Logik hinzu**
-7. **Keine Breaking Changes** am bestehenden Code
-8. **KEIN Angular Material oder andere UI-Frameworks!**
-9. **Schreibe CSS selbst, kein Framework-CSS!**
-
-Antworte mit einem JSON-Array von File-Änderungen:
+Antworte NUR mit JSON:
 
 \`\`\`json
 {
-  "changes": [
+  "filesToModify": [
     {
-      "action": "create" | "update" | "delete",
       "path": "test-app/...",
-      "content": "Der vollständige File-Content (bei create/update)",
-      "reason": "Warum diese Änderung?"
+      "action": "create" | "update" | "delete",
+      "reason": "Warum muss diese Datei geändert werden?"
     }
   ],
-  "summary": "Kurze Zusammenfassung der Implementierung"
+  "implementationStrategy": "Kurze Beschreibung der Strategie"
 }
 \`\`\`
 
-**WICHTIG**: 
-- Gib den KOMPLETTEN File-Content zurück, nicht nur Snippets!
-- Bei Updates: Komplette Datei mit allen Änderungen!
-- Mache nur die minimal nötigen Änderungen!
-- KEINE neuen npm packages oder Libraries!`;
+**WICHTIG**: Liste NUR die Files die wirklich geändert werden müssen!`;
+
+    try {
+      const message = await this.anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }]
+      });
+
+      const responseText = message.content[0].text.trim()
+        .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON found');
+      
+      const plan = JSON.parse(jsonMatch[0]);
+      
+      console.log(`   ✅ Plan created: ${plan.filesToModify.length} file(s)`);
+      console.log(`   📋 Strategy: ${plan.implementationStrategy}`);
+      
+      return plan;
+      
+    } catch (error) {
+      console.error(`   ❌ Planning failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * SCHRITT 2: Implementiere EINE einzelne Datei
+   */
+  async implementSingleFile(fileToModify, ticket, context) {
+    console.log(`\n${this.emoji} Implementing ${fileToModify.path}...`);
+    
+    await this.sendEvent({
+      type: 'coding',
+      message: `Working on ${fileToModify.path}`,
+      details: fileToModify.reason,
+      activity: `⚙️ Coding ${fileToModify.path}`
+    });
+
+    // Hole den aktuellen File-Content falls vorhanden
+    const existingFile = context.files.find(f => f.path === fileToModify.path);
+    const existingContent = existingFile ? existingFile.content : '';
+
+    const prompt = `Du bist ein Senior Full-Stack Developer. Implementiere die Änderungen für DIESE EINE Datei.
+
+=== TICKET ===
+${ticket.key}: ${ticket.summary}
+
+=== FILE ZU ÄNDERN ===
+Path: ${fileToModify.path}
+Action: ${fileToModify.action}
+Reason: ${fileToModify.reason}
+
+=== AKTUELLER CONTENT ===
+${existingContent || '(Neue Datei)'}
+
+=== ARCHITEKTUR-HINWEISE ===
+${this.extractSection(ticket.description, '🏛️ Architektur-Design')?.substring(0, 1000) || 'Keine'}
+
+=== UI-DESIGN-HINWEISE ===
+${this.extractSection(ticket.description, '🎨 UI-Design')?.substring(0, 1000) || 'Keine'}
+
+=== TECH STACK ===
+- Frontend: Angular (Custom CSS, NO Material!)
+- Backend: Node.js
+- Database: In-Memory
+- 3rd Party: NONE
+
+=== AUFGABE ===
+Generiere den KOMPLETTEN neuen Content für diese Datei.
+
+**WICHTIG**:
+- Gib den VOLLSTÄNDIGEN File-Content zurück
+- KEINE Kommentare wie "// rest bleibt gleich"
+- Halte dich an bestehenden Code-Stil
+- KEIN Angular Material oder UI-Frameworks
+- Schreibe CSS selbst!
+
+Antworte NUR mit JSON:
+
+\`\`\`json
+{
+  "content": "Der KOMPLETTE File-Content hier",
+  "changes": "Kurze Liste der Änderungen"
+}
+\`\`\``;
 
     try {
       const message = await this.anthropic.messages.create({
@@ -396,18 +425,70 @@ Antworte mit einem JSON-Array von File-Änderungen:
 
       let responseText = message.content[0].text.trim();
       
-      // Extract JSON from markdown code blocks
+      // Robust JSON extraction
       responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       
-      const implementation = JSON.parse(responseText);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON found');
       
-      console.log(`   ✅ Implementation planned: ${implementation.changes.length} file(s)`);
-      console.log(`   📝 ${implementation.summary}`);
+      const result = JSON.parse(jsonMatch[0]);
       
-      return implementation;
+      console.log(`   ✅ ${fileToModify.path} implemented`);
+      console.log(`   📝 Changes: ${result.changes}`);
+      
+      return {
+        path: fileToModify.path,
+        action: fileToModify.action,
+        content: result.content,
+        reason: fileToModify.reason
+      };
       
     } catch (error) {
-      console.error(`   ❌ Failed to generate implementation: ${error.message}`);
+      console.error(`   ❌ Failed to implement ${fileToModify.path}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * HAUPT-METHODE: Implementiere die Code-Änderungen (Schritt für Schritt)
+   */
+  async implementChanges(ticket, context) {
+    console.log(`\n${this.emoji} Starting implementation (step-by-step)...`);
+    
+    try {
+      // SCHRITT 1: Erstelle Implementierungsplan
+      const plan = await this.planImplementation(ticket, context);
+      
+      // SCHRITT 2: Implementiere jede Datei einzeln
+      const changes = [];
+      
+      for (const fileToModify of plan.filesToModify) {
+        try {
+          const fileChange = await this.implementSingleFile(fileToModify, ticket, context);
+          changes.push(fileChange);
+          
+          // Kurze Pause zwischen Files
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+        } catch (error) {
+          console.error(`   ⚠️  Skipping ${fileToModify.path}: ${error.message}`);
+          // Weiter mit nächster Datei
+        }
+      }
+      
+      if (changes.length === 0) {
+        throw new Error('No files were successfully implemented');
+      }
+      
+      console.log(`\n   ✅ Implementation complete: ${changes.length}/${plan.filesToModify.length} file(s)`);
+      
+      return {
+        changes,
+        summary: plan.implementationStrategy
+      };
+      
+    } catch (error) {
+      console.error(`   ❌ Implementation failed: ${error.message}`);
       throw error;
     }
   }
@@ -428,7 +509,7 @@ Antworte mit einem JSON-Array von File-Änderungen:
         });
 
         if (change.action === 'create' || change.action === 'update') {
-          await this.callMCPTool('github', 'update_file', {
+          await this.callMCPTool('github', 'commit_file', {
             path: change.path,
             content: change.content,
             branch: branchName,
@@ -438,13 +519,7 @@ Antworte mit einem JSON-Array von File-Änderungen:
           console.log(`   ✅ ${change.action}: ${change.path}`);
           
         } else if (change.action === 'delete') {
-          await this.callMCPTool('github', 'delete_file', {
-            path: change.path,
-            branch: branchName,
-            message: `delete: ${change.path} - ${change.reason}`
-          });
-          
-          console.log(`   ✅ Deleted: ${change.path}`);
+          console.log(`   ⚠️  Skipping delete: ${change.path} (not implemented yet)`);
         }
 
         // Kurze Pause zwischen File-Operationen
@@ -498,24 +573,24 @@ _Created by ${this.emoji} ${this.name}_`;
       const result = await this.callMCPTool('github', 'create_pull_request', {
         title: prTitle,
         body: prBody,
-        head: branchName,
-        base: 'main'
+        headBranch: branchName,
+        baseBranch: 'main'
       });
 
       if (result.success) {
-        console.log(`   ✅ PR created: ${result.pullRequest.url}`);
+        console.log(`   ✅ PR created: ${result.pr.url}`);
         
         await this.sendEvent({
           type: 'pr_ready',
           message: `PR created for ${ticket.key}`,
           details: JSON.stringify({
-            prUrl: result.pullRequest.url,
-            prNumber: result.pullRequest.number
+            prUrl: result.pr.url,
+            prNumber: result.pr.number
           }),
           activity: `✅ PR Ready`
         });
 
-        return result.pullRequest;
+        return result.pr;
       }
     } catch (error) {
       console.error(`   ❌ Failed to create PR: ${error.message}`);
