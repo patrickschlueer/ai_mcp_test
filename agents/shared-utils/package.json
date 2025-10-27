@@ -1,0 +1,9 @@
+{
+  "name": "@ai-agents/shared-utils",
+  "version": "1.0.0",
+  "description": "Shared utilities for AI Agents",
+  "type": "module",
+  "main": "file-discovery.js",
+  "author": "AI Agents Team",
+  "license": "MIT"
+}

@@ -502,6 +502,13 @@ Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iterati
       console.log(`${this.emoji} Processing: ${subTask.key}`);
       console.log(`${'='.repeat(60)}`);
 
+      // 📊 Status Update: Start processing
+      await this.sendEvent({
+        type: 'subtask_processing_started',
+        message: `Processing UI design sub-task ${subTask.key}`,
+        activity: `🎨 Designing ${subTask.key}`
+      });
+
       // Check ob bereits bearbeitet
       const fullSubTask = await this.callMCPTool('jira', 'get_ticket', { 
         ticketKey: subTask.key 
@@ -523,6 +530,12 @@ Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iterati
       }
 
       // 1. Hole Parent-Task
+      await this.sendEvent({
+        type: 'reading_parent_task',
+        message: `Reading parent task for ${subTask.key}`,
+        activity: `📝 Reading parent task for ${subTask.key}`
+      });
+      
       const parentTask = await this.getParentTask(fullSubTask.ticket);
       if (!parentTask) {
         console.log(`   ❌ Could not load parent task`);
@@ -530,9 +543,20 @@ Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iterati
       }
 
       // 2. Lese Frontend-Files
+      await this.sendEvent({
+        type: 'reading_frontend_files',
+        message: `Reading frontend files for ${subTask.key}`,
+        activity: `📁 Reading frontend files for ${subTask.key}`
+      });
+      
       const codeFiles = await this.readRelevantFiles(fullSubTask.ticket, parentTask);
 
       // 3. Erstelle initiales Design
+      await this.sendEvent({
+        type: 'creating_initial_design',
+        message: `Creating initial UI design for ${subTask.key}`,
+        activity: `🎨 Creating initial design for ${subTask.key}`
+      });
       let currentDesign = await this.createInitialDesign(
         fullSubTask.ticket, 
         parentTask, 
@@ -565,9 +589,20 @@ Füge am Anfang einen kurzen Abschnitt "## 🔍 Verbesserungen in dieser Iterati
       }
 
       // 5. Dokumentiere im Parent
+      await this.sendEvent({
+        type: 'documenting_in_parent',
+        message: `Documenting UI design in parent task`,
+        activity: `📝 Documenting in parent ${parentTask.key}`
+      });
+      
       await this.documentInParentTask(parentTask, currentDesign);
 
       // 6. Complete Sub-Task
+      await this.sendEvent({
+        type: 'completing_subtask',
+        message: `Completing sub-task ${subTask.key}`,
+        activity: `✅ Completing ${subTask.key}`
+      });
       await this.completeSubTask(fullSubTask.ticket);
 
       this.processedSubTasks.add(subTask.key);

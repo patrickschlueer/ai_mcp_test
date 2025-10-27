@@ -1,14 +1,8 @@
 /**
- * File Discovery Utility for AI Agents
+ * File Discovery Utility for AI Agents - CommonJS Version
  * 
  * Provides centralized, reusable methods for discovering and selecting
  * project files dynamically via MCP (Model Context Protocol).
- * 
- * Benefits:
- * - DRY: Single source of truth for file discovery logic
- * - Maintainable: Update once, all agents benefit
- * - Testable: Can be unit tested independently
- * - Scalable: Works with any project structure
  */
 
 class FileDiscoveryUtil {
@@ -18,91 +12,50 @@ class FileDiscoveryUtil {
   }
 
   /**
-   * 🔧 FIXED: Recursively discover files in a directory
-   * Uses result.directories array to find subdirectories!
-   * 
-   * @param {string} basePath - Starting directory path
-   * @param {string[]} extensions - File extensions to include (e.g. ['.js', '.ts'])
-   * @returns {Promise<string[]>} Array of file paths
+   * Recursively discover files in a directory
    */
   async discoverFilesRecursively(basePath, extensions = ['.js', '.ts']) {
-    const foundFiles = [];
+    const files = [];
     const dirsToExplore = [basePath];
     const explored = new Set();
-    const maxDepth = 10;
-    let currentDepth = 0;
     
-    console.log(`   🔍 Starting recursive discovery from: ${basePath}`);
-    
-    while (dirsToExplore.length > 0 && currentDepth < maxDepth) {
-      const batchSize = dirsToExplore.length;
-      console.log(`   📂 Depth ${currentDepth}: Exploring ${batchSize} directories`);
+    while (dirsToExplore.length > 0) {
+      const currentPath = dirsToExplore.shift();
       
-      for (let i = 0; i < batchSize; i++) {
-        const currentPath = dirsToExplore.shift();
-        
-        // Skip if already explored or node_modules
-        if (explored.has(currentPath) || currentPath.includes('node_modules')) {
-          continue;
-        }
-        
-        explored.add(currentPath);
-        console.log(`      Checking: ${currentPath}`);
-        
-        try {
-          const result = await this.callMCPTool('github', 'list_directory', { 
-            path: currentPath 
-          });
-          
-          if (!result.success) {
-            console.log(`      ⚠️  No success for ${currentPath}`);
-            continue;
-          }
-          
-          // 🔥 CRITICAL FIX: Use result.files for files and result.directories for subdirs!
-          const files = result.files || [];
-          const directories = result.directories || [];
-          
-          console.log(`      Found ${files.length} files, ${directories.length} directories`);
-          
-          // Process files
-          for (const fileName of files) {
-            const hasMatchingExtension = extensions.some(ext => fileName.endsWith(ext));
-            if (hasMatchingExtension) {
-              const fullPath = `${currentPath}/${fileName}`;
-              foundFiles.push(fullPath);
-              console.log(`      ✅ File: ${fileName}`);
-            }
-          }
-          
-          // Process directories - add to exploration queue
-          for (const dirName of directories) {
-            const fullPath = `${currentPath}/${dirName}`;
-            dirsToExplore.push(fullPath);
-            console.log(`      📁 Dir: ${dirName}`);
-          }
-          
-        } catch (error) {
-          console.log(`      ❌ Error reading ${currentPath}: ${error.message}`);
-          continue;
-        }
+      if (explored.has(currentPath) || currentPath.includes('node_modules')) {
+        continue;
       }
       
-      currentDepth++;
+      explored.add(currentPath);
+      
+      try {
+        const result = await this.callMCPTool('github', 'list_directory', { 
+          path: currentPath 
+        });
+        
+        if (!result.success || !result.files) continue;
+        
+        for (const item of result.files) {
+          const fullPath = `${currentPath}/${item}`;
+          const hasMatchingExtension = extensions.some(ext => item.endsWith(ext));
+          
+          if (hasMatchingExtension) {
+            files.push(fullPath);
+          }
+          else if (!item.includes('.')) {
+            dirsToExplore.push(fullPath);
+          }
+        }
+      } catch (error) {
+        continue;
+      }
     }
     
-    if (currentDepth >= maxDepth) {
-      console.log(`   ⚠️  Reached max depth of ${maxDepth}, stopping recursion`);
-    }
-    
-    console.log(`   ✅ Discovery complete: Found ${foundFiles.length} files`);
-    return foundFiles;
+    return files;
   }
 
   /**
    * Discover all project files (backend + frontend)
-   * 
-   * @returns {Promise<Object>} Object with backend, frontend, and all files
    */
   async discoverProjectFiles() {
     console.log(`\n${this.emoji} Discovering project files recursively...`);
@@ -110,13 +63,9 @@ class FileDiscoveryUtil {
     try {
       const discoveredFiles = [];
       
-      // Backend rekursiv durchsuchen
-      console.log(`\n   🔧 Searching backend...`);
       const backendFiles = await this.discoverFilesRecursively('test-app/backend', ['.js']);
       discoveredFiles.push(...backendFiles);
       
-      // Frontend rekursiv durchsuchen
-      console.log(`\n   🎨 Searching frontend...`);
       const frontendFiles = await this.discoverFilesRecursively(
         'test-app/frontend/src/app', 
         ['.ts', '.html', '.css']
@@ -124,11 +73,11 @@ class FileDiscoveryUtil {
       discoveredFiles.push(...frontendFiles);
       
       if (discoveredFiles.length > 0) {
-        console.log(`\n   ✅ Discovered ${discoveredFiles.length} files via MCP`);
+        console.log(discoveredFiles);
+        console.log(`   ✅ Discovered ${discoveredFiles.length} files via MCP`);
         console.log(`      Backend: ${backendFiles.length} files`);
         console.log(`      Frontend: ${frontendFiles.length} files`);
         
-        // Zeige Struktur-Überblick
         const structureOverview = this.analyzeStructure(discoveredFiles);
         console.log(`\n   📁 Project Structure:`);
         Object.entries(structureOverview).forEach(([dir, count]) => {
@@ -145,8 +94,6 @@ class FileDiscoveryUtil {
       console.log(`   ⚠️  MCP discovery failed: ${error.message}`);
     }
     
-    // Fallback auf Standard-Liste
-    console.log(`   ⚠️  Using fallback file list`);
     const fallbackFiles = [
       'test-app/backend/server.js',
       'test-app/backend/models/user.js',
@@ -164,9 +111,6 @@ class FileDiscoveryUtil {
 
   /**
    * Analyze project structure and group files
-   * 
-   * @param {string[]} files - Array of file paths
-   * @returns {Object} Structure overview with file counts per directory
    */
   analyzeStructure(files) {
     const structure = {};
@@ -201,10 +145,7 @@ class FileDiscoveryUtil {
   }
 
   /**
-   * Group files by type/feature for better organization
-   * 
-   * @param {string[]} files - Array of file paths
-   * @returns {Object} Grouped files by category
+   * Group files by type/feature
    */
   groupFilesByType(files) {
     return {
@@ -221,11 +162,7 @@ class FileDiscoveryUtil {
   }
 
   /**
-   * Filter files by keywords (e.g. "user", "auth", "product")
-   * 
-   * @param {string[]} files - Array of file paths
-   * @param {string[]} keywords - Keywords to search for
-   * @returns {string[]} Filtered files
+   * Filter files by keywords
    */
   filterFilesByKeywords(files, keywords) {
     if (!keywords || keywords.length === 0) return files;
@@ -238,17 +175,12 @@ class FileDiscoveryUtil {
 
   /**
    * Find files related to a specific feature
-   * 
-   * @param {string[]} files - All project files
-   * @param {string} featureName - Feature name (e.g. "user-management")
-   * @returns {string[]} Related files
    */
   findFeatureFiles(files, featureName) {
     const featureLower = featureName.toLowerCase();
     
     return files.filter(file => {
       const fileLower = file.toLowerCase();
-      // Match feature folder or file names
       return fileLower.includes(`/features/${featureLower}`) ||
              fileLower.includes(featureLower.replace('-', ''));
     });
@@ -256,10 +188,6 @@ class FileDiscoveryUtil {
 
   /**
    * Find files by extension
-   * 
-   * @param {string[]} files - All project files
-   * @param {string} extension - Extension to filter (e.g. '.ts', '.html')
-   * @returns {string[]} Filtered files
    */
   findFilesByExtension(files, extension) {
     return files.filter(f => f.endsWith(extension));
@@ -267,10 +195,6 @@ class FileDiscoveryUtil {
 
   /**
    * Get component-related files (TypeScript, HTML, CSS trilogy)
-   * 
-   * @param {string[]} files - All project files
-   * @param {string} componentName - Component name (e.g. "user-form")
-   * @returns {Object} Object with ts, html, css files
    */
   getComponentFiles(files, componentName) {
     const componentFiles = files.filter(f => 
@@ -287,9 +211,6 @@ class FileDiscoveryUtil {
 
   /**
    * Get summary statistics about discovered files
-   * 
-   * @param {string[]} files - All project files
-   * @returns {Object} Statistics object
    */
   getFileStatistics(files) {
     const grouped = this.groupFilesByType(files);
@@ -318,8 +239,6 @@ class FileDiscoveryUtil {
 
   /**
    * Pretty print file statistics
-   * 
-   * @param {string[]} files - All project files
    */
   printStatistics(files) {
     const stats = this.getFileStatistics(files);
@@ -342,4 +261,4 @@ class FileDiscoveryUtil {
   }
 }
 
-export default FileDiscoveryUtil;
+module.exports = FileDiscoveryUtil;

@@ -352,12 +352,26 @@ Antworte NUR mit JSON:
    * 🆕 VERWENDET JETZT: FileDiscoveryUtil mit improved grouping
    */
   async selectRelevantFiles(ticket) {
+    // 📊 Status Update: Starting file discovery
+    await this.sendEvent({
+      type: 'file_discovery_started',
+      message: `Discovering project files for ${ticket.key}`,
+      activity: `🔍 Scanning project structure for ${ticket.key}`
+    });
+    
     const allFiles = await this.discoverRealFilesViaMCP();
     
     if (allFiles.length === 0) {
       console.log(`   ⚠️  No files discovered`);
       return [];
     }
+    
+    // 📊 Status Update: File selection
+    await this.sendEvent({
+      type: 'file_selection_started',
+      message: `Selecting relevant files from ${allFiles.length} discovered files`,
+      activity: `📁 Analyzing ${allFiles.length} files for ${ticket.key}`
+    });
     
     console.log(`\n${this.emoji} Selecting relevant files for ticket...`);
     
@@ -419,6 +433,13 @@ Antworte NUR mit JSON Array:
       console.log(`   ✅ Selected ${validFiles.length} relevant files:`);
       validFiles.forEach(f => console.log(`      - ${f}`));
       
+      // 📊 Status Update: Files selected
+      await this.sendEvent({
+        type: 'files_selected',
+        message: `Selected ${validFiles.length} relevant files for ${ticket.key}`,
+        activity: `📄 Reading ${validFiles.length} files for ${ticket.key}`
+      });
+      
       return validFiles.length > 0 ? validFiles : allFiles.slice(0, 5);
       
     } catch (error) {
@@ -465,6 +486,13 @@ Antworte NUR mit JSON Array:
 
   async analyzeTicket(ticket) {
     console.log(`\n${this.emoji} Analyzing ticket: ${ticket.key}`);
+    
+    // 📊 Status Update: Start analysis
+    await this.sendEvent({
+      type: 'analysis_started',
+      message: `Analyzing ticket ${ticket.key}`,
+      activity: `🧠 AI analyzing ${ticket.key}`
+    });
     
     const codeContext = await this.gatherCodeContext(ticket);
 
@@ -797,6 +825,13 @@ ODER wenn noch Fragen offen:
    * 🆕 Methode 1: Generiere detaillierte Beschreibung
    */
   async generateDetailedDescription(ticket, originalAnalysis, answers, codeFiles) {
+    // 📊 Status Update: Generating description
+    await this.sendEvent({
+      type: 'generating_description',
+      message: `Generating detailed description for ${ticket.key}`,
+      activity: `📝 Writing detailed description for ${ticket.key}`
+    });
+    
     const prompt = `Du bist ein Technical Product Owner. Erstelle eine DETAILLIERTE Ticket-Beschreibung.
 
 === ORIGINAL TICKET ===
@@ -857,6 +892,13 @@ Antworte NUR mit JSON: { "description": "..." }`;
    * 🆕 Methode 2: Entscheide welche Agenten benötigt werden
    */
   async determineRequiredAgents(ticket, description, originalAnalysis, codeFiles) {
+    // 📊 Status Update: Determining required agents
+    await this.sendEvent({
+      type: 'determining_agents',
+      message: `Determining required agents for ${ticket.key}`,
+      activity: `🤔 Deciding which agents are needed for ${ticket.key}`
+    });
+    
     const prompt = `Du bist ein Technical Product Owner. Entscheide ob Architekt oder Designer benötigt werden.
 
 === TICKET ===
@@ -1037,6 +1079,13 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
   async finalizeTicket(ticket, originalAnalysis, answers, codeFiles) {
     console.log(`\n${this.emoji} Finalizing ticket: ${ticket.key}`);
     
+    // 📊 Status Update: Starting finalization
+    await this.sendEvent({
+      type: 'finalization_started',
+      message: `Finalizing ticket ${ticket.key}`,
+      activity: `⚙️ Finalizing ${ticket.key}`
+    });
+    
     // 🧠 Hole Code Context falls nicht vorhanden
     if (!codeFiles || codeFiles.length === 0) {
       const context = await this.gatherCodeContext(ticket);
@@ -1061,6 +1110,13 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
     
     console.log(`   📋 Required agents: ${agentNeeds.needsArchitect ? '🏛️ Architect' : ''} ${agentNeeds.needsDesigner ? '🎨 Designer' : ''}`);
     
+    // 📊 Status Update: Updating description
+    await this.sendEvent({
+      type: 'updating_description',
+      message: `Updating description for ${ticket.key}`,
+      activity: `📝 Updating ticket description for ${ticket.key}`
+    });
+    
     // Update Main-Task Beschreibung
     const updateResult = await this.callMCPTool('jira', 'update_ticket', {
       ticketKey: ticket.key,
@@ -1071,6 +1127,15 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
     
     if (!updateResult.success) {
       console.error(`   ❌ Failed to update description`);
+    }
+    
+    // 📊 Status Update: Creating sub-tasks
+    if (agentNeeds.needsArchitect || agentNeeds.needsDesigner) {
+      await this.sendEvent({
+        type: 'creating_subtasks',
+        message: `Creating sub-tasks for ${ticket.key}`,
+        activity: `📋 Creating sub-tasks for ${ticket.key}`
+      });
     }
     
     // 🆕 Erstelle Sub-Tasks falls benötigt
@@ -1319,6 +1384,13 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
       console.log(`${this.emoji} Processing: ${ticket.key}`);
       console.log(`${'='.repeat(60)}`);
 
+      // 📊 Status Update: Start processing
+      await this.sendEvent({
+        type: 'ticket_processing_started',
+        message: `Processing ticket ${ticket.key}`,
+        activity: `📝 Analyzing ${ticket.key}`
+      });
+
       // 🔥 CRITICAL: Skip Sub-Tasks immediately!
       if (ticket.issueType === 'Sub-task') {
         console.log(`\n${this.emoji} ⚠️  Skipping Sub-Task ${ticket.key} - not for Tech PO!`);
@@ -1361,6 +1433,13 @@ _Dieser Sub-Task wurde automatisch vom Technical Product Owner erstellt._`;
    */
   async checkReadyForDevelopment() {
     console.log(`\n${this.emoji} Checking for tickets ready for development...`);
+    
+    // 📊 Status Update: Checking ready tickets
+    await this.sendEvent({
+      type: 'checking_ready_tickets',
+      message: 'Checking for tickets ready for development',
+      activity: '✅ Checking completed sub-tasks'
+    });
     
     // 🔥 Hole ALLE Tickets mit Status "Approved" ODER "Genehmigt"
     const statuses = ['Approved', 'Genehmigt'];
