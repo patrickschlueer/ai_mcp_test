@@ -1,43 +1,52 @@
 <div class="card">
   <div class="card-header">
-    <div class="header-left">
-      <h2>Users ({{ (filteredUsers$ | async)?.length || 0 }})</h2>
-    </div>
-    <div class="header-right">
-      <div class="search-container">
-        <input 
-          type="text" 
-          class="search-input"
-          placeholder="Search users..."
-          [formControl]="searchControl"
-          aria-label="Search users by name, email or role">
-        <span class="search-icon">🔍</span>
-        <button 
-          *ngIf="searchControl.value" 
-          class="clear-search-btn"
-          (click)="clearSearch()"
-          aria-label="Clear search">
-          ✕
-        </button>
-      </div>
-      <button class="btn btn-refresh" (click)="onRefresh()">
-        🔄 Refresh
+    <h2>Users ({{ filteredUsers.length }})</h2>
+    <button class="btn btn-refresh" (click)="onRefresh()">
+      🔄 Refresh
+    </button>
+  </div>
+
+  <div class="search-section">
+    <div class="search-input-container">
+      <input 
+        type="text" 
+        class="search-input"
+        placeholder="Search users by name, email or role..."
+        [(ngModel)]="searchTerm"
+        (input)="onSearchChange($event)"
+        (keydown.escape)="clearSearch()"
+        #searchInput
+        aria-label="Search users"
+        role="searchbox"
+        aria-describedby="search-help">
+      <button 
+        class="btn btn-clear"
+        *ngIf="searchTerm"
+        (click)="clearSearch()"
+        title="Clear search"
+        aria-label="Clear search">
+        ✕
       </button>
+      <span class="search-icon" *ngIf="!searchTerm">🔍</span>
+    </div>
+    <div id="search-help" class="search-help" *ngIf="searchTerm">
+      Showing {{ filteredUsers.length }} of {{ users.length }} users
     </div>
   </div>
 
   <div class="loading" *ngIf="loading">Loading users...</div>
 
-  <div class="no-data" *ngIf="!loading && (filteredUsers$ | async)?.length === 0 && !searchControl.value">
+  <div class="no-data" *ngIf="!loading && users.length === 0">
     No users found. Create one above!
   </div>
 
-  <div class="no-search-results" *ngIf="!loading && (filteredUsers$ | async)?.length === 0 && searchControl.value">
-    No users found matching "{{ searchControl.value }}". 
-    <button class="link-btn" (click)="clearSearch()">Clear search</button>
+  <div class="no-results" *ngIf="!loading && users.length > 0 && filteredUsers.length === 0">
+    <div class="no-results-icon">🔍</div>
+    <h3>No users match your search</h3>
+    <p>Try adjusting your search terms or <button class="btn-link" (click)="clearSearch()">clear the filter</button></p>
   </div>
 
-  <table *ngIf="!loading && (filteredUsers$ | async)?.length > 0">
+  <table *ngIf="!loading && filteredUsers.length > 0">
     <thead>
       <tr>
         <th>Name</th>
@@ -49,8 +58,9 @@
     </thead>
     <tbody>
       <app-user-table-row 
-        *ngFor="let user of (filteredUsers$ | async)"
+        *ngFor="let user of filteredUsers"
         [user]="user"
+        [searchTerm]="searchTerm"
         (edit)="onEdit($event)"
         (delete)="onDelete($event)">
       </app-user-table-row>
