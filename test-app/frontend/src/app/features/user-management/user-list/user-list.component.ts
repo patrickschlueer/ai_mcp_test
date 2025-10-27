@@ -1,17 +1,15 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormControl } from '@angular/forms';
-import { Observable, Subject, BehaviorSubject, combineLatest } from 'rxjs';
-import { map, debounceTime, distinctUntilChanged, startWith, takeUntil } from 'rxjs/operators';
+import { Subject, debounceTime, distinctUntilChanged, takeUntil } from 'rxjs';
 import { User } from '../../../models/user.model';
 import { UserTableRowComponent } from '../user-table-row/user-table-row.component';
 
 /**
  * User List Component
  * 
- * Zeigt Liste aller Users in einer Tabelle an mit Filterfunktionalität
+ * Zeigt Liste aller Users in einer Tabelle an mit Filterung
  * Component Split: Verwendet UserTableRowComponent für einzelne Zeilen
- * Features: Echtzeit-Suche mit debouncing, filtert nach Name und Email
  */
 @Component({
   selector: 'app-user-list',
@@ -28,26 +26,13 @@ export class UserListComponent implements OnInit, OnDestroy {
   @Output() refresh = new EventEmitter<void>();
 
   searchControl = new FormControl('');
-  filteredUsers$!: Observable<User[]>;
-  private users$ = new BehaviorSubject<User[]>([]);
+  filteredUsers: User[] = [];
+  filterLoading = false;
   private destroy$ = new Subject<void>();
 
   ngOnInit() {
-    // Initialize filtered users observable with search functionality
-    const searchTerm$ = this.searchControl.valueChanges.pipe(
-      startWith(''),
-      debounceTime(300),
-      distinctUntilChanged(),
-      takeUntil(this.destroy$)
-    );
-
-    this.filteredUsers$ = combineLatest([
-      this.users$.asObservable(),
-      searchTerm$
-    ]).pipe(
-      map(([users, searchTerm]) => this.filterUsers(users, searchTerm || '')),
-      takeUntil(this.destroy$)
-    );
+    this.filteredUsers = [...this.users];
+    this.setupSearchFilter();
   }
 
   ngOnDestroy() {
@@ -56,22 +41,39 @@ export class UserListComponent implements OnInit, OnDestroy {
   }
 
   ngOnChanges() {
-    // Update users observable when input changes
-    if (this.users) {
-      this.users$.next(this.users);
-    }
+    this.applyFilter(this.searchControl.value || '');
   }
 
-  private filterUsers(users: User[], searchTerm: string): User[] {
-    if (!searchTerm || searchTerm.trim() === '') {
-      return users;
+  private setupSearchFilter() {
+    this.searchControl.valueChanges
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        takeUntil(this.destroy$)
+      )
+      .subscribe(searchTerm => {
+        this.applyFilter(searchTerm || '');
+      });
+  }
+
+  private applyFilter(searchTerm: string) {
+    if (!searchTerm.trim()) {
+      this.filteredUsers = [...this.users];
+      return;
     }
 
-    const term = searchTerm.toLowerCase().trim();
-    return users.filter(user => 
-      user.name.toLowerCase().includes(term) ||
-      user.email.toLowerCase().includes(term)
-    );
+    this.filterLoading = true;
+    
+    // Simulate async filtering for UX
+    setTimeout(() => {
+      const term = searchTerm.toLowerCase();
+      this.filteredUsers = this.users.filter(user => 
+        user.name.toLowerCase().includes(term) ||
+        user.email.toLowerCase().includes(term) ||
+        (user.role && user.role.toLowerCase().includes(term))
+      );
+      this.filterLoading = false;
+    }, 100);
   }
 
   clearSearch() {
@@ -88,5 +90,21 @@ export class UserListComponent implements OnInit, OnDestroy {
 
   onRefresh() {
     this.refresh.emit();
+  }
+
+  get hasSearchTerm(): boolean {
+    return !!(this.searchControl.value && this.searchControl.value.trim());
+  }
+
+  get userCount(): number {
+    return this.filteredUsers.length;
+  }
+
+  get totalUserCount(): number {
+    return this.users.length;
+  }
+
+  get isFiltered(): boolean {
+    return this.userCount !== this.totalUserCount;
   }
 }
