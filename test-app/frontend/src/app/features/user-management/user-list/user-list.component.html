@@ -1,22 +1,6 @@
 <div class="card">
   <div class="card-header">
-    <h2>Users ({{ (filteredUsers$ | async)?.length || 0 }})</h2>
-    <div class="filter-container">
-      <input 
-        type="text" 
-        class="filter-input" 
-        placeholder="Filter users by name or email..."
-        [(ngModel)]="filterQuery"
-        (keydown.escape)="clearFilter()"
-        aria-label="Filter users by name or email">
-      <button 
-        *ngIf="filterQuery" 
-        class="btn btn-clear-filter" 
-        (click)="clearFilter()"
-        aria-label="Clear filter">
-        ✕
-      </button>
-    </div>
+    <h2>Users ({{ users.length }})</h2>
     <button class="btn btn-refresh" (click)="onRefresh()">
       🔄 Refresh
     </button>
@@ -28,12 +12,7 @@
     No users found. Create one above!
   </div>
 
-  <div class="no-results" *ngIf="!loading && users.length > 0 && (filteredUsers$ | async)?.length === 0">
-    No users match your filter "{{ filterQuery }}". 
-    <button class="btn btn-link" (click)="clearFilter()">Clear filter</button>
-  </div>
-
-  <table *ngIf="!loading && (filteredUsers$ | async)?.length > 0">
+  <table *ngIf="!loading && users.length > 0">
     <thead>
       <tr>
         <th>Name</th>
@@ -45,7 +24,7 @@
     </thead>
     <tbody>
       <app-user-table-row 
-        *ngFor="let user of filteredUsers$ | async"
+        *ngFor="let user of users"
         [user]="user"
         (edit)="onEdit($event)"
         (delete)="onDelete($event)">
